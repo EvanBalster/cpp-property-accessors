@@ -48,7 +48,7 @@ struct Virtual_Rect
     
         // Proxy (reference) property accessors
         Proxy  (int,  x1,     rect->x1),
-        Proxy  (int,  x2,     rect->x1),
+        Proxy  (int,  x2,     rect->x2),
         Proxy  (int,  y1,     rect->y1),
         Proxy  (int,  y2,     rect->y2),
                     
@@ -81,7 +81,7 @@ struct Virtual_Rect
     
     // Define reference-getters for proxy property accessors.
     struct acc_x1 : RectPtr {int& get() const {return rect->x1;}};
-    struct acc_x2 : RectPtr {int& get() const {return rect->x1;}};
+    struct acc_x2 : RectPtr {int& get() const {return rect->x2;}};
     struct acc_y1 : RectPtr {int& get() const {return rect->y1;}};
     struct acc_y2 : RectPtr {int& get() const {return rect->y2;}};
 
