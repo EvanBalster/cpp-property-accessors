@@ -5,7 +5,7 @@ This is a header-only library implementing zero-overhead **property accessors** 
 
 Property accessors are commonly used to make members of one class look like members of another class that refers to it, or to provide multiple mutable representations of the same information.  This syntactic sugar is a popular feature of other high-level languages such as C# but sadly hasn't been accepted into standard C++.
 
-<span style="background-color: yellow;">**The API is a work-in-progress and subject to change.**</span>
+<mark>**The API is a work-in-progress and subject to change.**</mark>
 
 ### Features
 
@@ -183,33 +183,38 @@ PropertyAccess_Mimic(Rect,
 ```
 
 <blockquote>
+<details> <summary>🔎<strong>See how to do this without macros</strong>, for more control.</summary>
 
-<details> <summary>🔎<strong>See how to do this without macros</strong>.</summary>
 
 
 We can specialize the mimic template ourselves.  The `property_access::member` template handles access to member variables.  When forwarding member functions, we use `_property_getset.get()` which returns either a value or reference depending on whether the specialization is applied to a proxy property or a value property.
+
+Defining this class yourself provides more control over how forwarding methods are defined and enables some features that property accessors might not otherwise have — such as additional conversion operators and explicitly templated member functions.
 
 ```c++
 #include <property_accessor_nomacros.h>
 
 // Make Rect-type properties work more like the real thing.
-template<typename GetSet_t> struct property_access::mimic<Rect, GetSet_t>
+namespace property_access
 {
-    union
+    template<typename GetSet_t> struct mimic<Rect, GetSet_t>
     {
-        // This variable is required in any specialization of property_access::mimic.
-        GetSet_t _property_getset;
+        union
+        {
+            // This variable is required in any specialization of property_access::mimic.
+            GetSet_t _property_getset;
 
-        // These accessors automatically extend proxy or value access to Rect's members.
-        property_access::member<GetSet_t, int, &Rect::x1> x1;
-        property_access::member<GetSet_t, int, &Rect::y1> y1;
-        property_access::member<GetSet_t, int, &Rect::x2> x2;
-        property_access::member<GetSet_t, int, &Rect::y2> y2;
+            // These accessors automatically extend proxy or value access to Rect's members.
+            property_access::member<GetSet_t, &Rect::x1> x1;
+            property_access::member<GetSet_t, &Rect::y1> y1;
+            property_access::member<GetSet_t, &Rect::x2> x2;
+            property_access::member<GetSet_t, &Rect::y2> y2;
+        };
+
+        // Forward the area() method.
+        int area() const    {return _property_getset.get().area();}
     };
-    
-    // Forward the area() method.
-    int area() const    {return _property_getset.get().area();}
-};
+}
 ```
 
 </details>
@@ -243,7 +248,7 @@ These operators are supported by all property accessors:
 ​    `() []  + - * / %  << >>  == != > >= < <=  ! ~ | & ^`
 
 * **Proxy** accessors forward these operators to the referenced object.
-* **Value** accessors apply these operators to the result of their `get` function.  <span style="background-color: yellow;">`set` is not invoked even if the value was changed</span>.
+* **Value** accessors apply these operators to the result of their `get` function.  <mark>`set` is not invoked even if the value was changed</mark>.
 
 These operators are supported by proxy property accessors and settable value property accessors:
 
@@ -255,8 +260,8 @@ These operators are supported by proxy property accessors and settable value pro
 
 The following operators are not forwarded to destination values, for the reasons stated.
 
-* `& ->*` — <span style="background-color: yellow;">Support for forwarding these operators may be added in the future as use-cases become clearer.</span>
-* `* ->` — Used to dereference properties and access their values.  <span style="background-color: yellow;">Support may be added if use-cases become clearer.</span>
+* `& ->*` — <mark>Support for forwarding these operators may be added in the future as use-cases become clearer.</mark>
+* `* ->` — Used to dereference properties and access their values.  <mark>Support may be added if use-cases become clearer.</mark>
 * `, && ||` — Rarely-used operators with a high likelihood of creating logic errors.  Support is not planned.
 * `new delete new[] delete[]` — Property accessors should never be independently allocated or deleted.
 
@@ -268,4 +273,4 @@ The `PropertyAccessors` macro declares all `get` functions const and all `set` f
 
 There is some room for improvement with regard to const-correctness.  The predecessor to this library only supported proxy property accessors, so there is a tendency toward assuming const qualification.
 
-<span style="background-color: yellow;">In the case of value property accessors, operators other than assignments, compound assignments and increments will not invoke `set`.</span>
+<mark>In the case of value property accessors, operators other than assignments, compound assignments and increments will not invoke `set`.</mark>

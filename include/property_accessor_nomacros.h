@@ -245,36 +245,38 @@ namespace property_access
 		A get/set rule for a member of some object represented by another property accessor.
 			Useful for implementing specializations of the mimic template.
 	*/
-	template<typename GetSet_t, typename Member_t, Member_t std::decay_t<getter_result_t<const GetSet_t>>::*MemberPtr, typename Enable = void>
+	template<typename GetSet_t, auto PointerToMember, typename Enable = void>
 	struct getset_member;
 
 	// member get/set implementation used when the object is accessed by reference through a proxy property accessor.
-	template<typename GetSet_t, typename Member_t, Member_t std::decay_t<getter_result_t<const GetSet_t>>::*MemberPtr>
-	struct getset_member<GetSet_t, Member_t, MemberPtr, std::enable_if_t<std::is_lvalue_reference_v<getter_result_t<const GetSet_t>>>> : GetSet_t
+	template<typename GetSet_t, typename Class_t, typename Member_t, Member_t Class_t::*PointerToMember>
+	struct getset_member<GetSet_t, PointerToMember,
+		std::enable_if_t<std::is_lvalue_reference_v<getter_result_t<const GetSet_t>>>> : GetSet_t
 	{
 		using property_t = proxy<getset_member>;
 
-		Member_t& get() const    {return this->GetSet_t::get().*MemberPtr;}
-		Member_t& get()          {return this->GetSet_t::get().*MemberPtr;}
+		Member_t& get() const    {return this->GetSet_t::get().*PointerToMember;}
+		Member_t& get()          {return this->GetSet_t::get().*PointerToMember;}
 	};
 
 	// member get/set implementation used when the object is accessed by copy through a value property accessor.
-	template<typename GetSet_t, typename Member_t, Member_t std::decay_t<getter_result_t<const GetSet_t>>::*MemberPtr>
-	struct getset_member<GetSet_t, Member_t, MemberPtr, std::enable_if_t<std::is_object_v<getter_result_t<const GetSet_t>>>> : GetSet_t
+	template<typename GetSet_t, typename Class_t, typename Member_t, Member_t Class_t::*PointerToMember>
+	struct getset_member<GetSet_t, PointerToMember,
+		std::enable_if_t<std::is_object_v<getter_result_t<const GetSet_t>>>> : GetSet_t
 	{
 		using property_t = value<getset_member>;
 
-		std::remove_reference_t<Member_t> get() const    {return this->GetSet_t::get().*MemberPtr;}
-		std::remove_reference_t<Member_t> get()          {return this->GetSet_t::get().*MemberPtr;}
+		std::remove_reference_t<Member_t> get() const    {return this->GetSet_t::get().*PointerToMember;}
+		std::remove_reference_t<Member_t> get()          {return this->GetSet_t::get().*PointerToMember;}
 
 		template<typename Y, std::enable_if_t<has_setter<const GetSet_t, Y>, bool> = true>
-		void set(Y &&y) const    {auto x = this->GetSet_t::get(); x.*MemberPtr = std::forward<Y>(y); this->GetSet_t::set(std::move(x));}
+		void set(Y &&y) const    {auto x = this->GetSet_t::get(); x.*PointerToMember = std::forward<Y>(y); this->GetSet_t::set(std::move(x));}
 		template<typename Y, std::enable_if_t<has_setter<      GetSet_t, Y>, bool> = true>
-		void set(Y &&y)          {auto x = this->GetSet_t::get(); x.*MemberPtr = std::forward<Y>(y); this->GetSet_t::set(std::move(x));}
+		void set(Y &&y)          {auto x = this->GetSet_t::get(); x.*PointerToMember = std::forward<Y>(y); this->GetSet_t::set(std::move(x));}
 	};
 
-	template<typename GetSet_t, typename Member_t, Member_t std::decay_t<getter_result_t<const GetSet_t>>::*MemberPtr>
-	using member = typename getset_member<GetSet_t, Member_t, MemberPtr>::property_t;
+	template<typename GetSet_t, auto PointerToMember>
+	using member = typename getset_member<GetSet_t, PointerToMember>::property_t;
 
 	/*
 		Template property_accessor automatically selects either value<> or proxy<> depending on
