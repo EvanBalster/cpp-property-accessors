@@ -24,7 +24,7 @@ Suppose we want a nicer interface to this bare-bones data structure:
 ```c++
 struct Rect
 {
-	int x1, x2, y1, y2;
+    int x1, x2, y1, y2;
     
     int area() const    {return (x2-x1) * (y2-y1);}
 };
@@ -44,8 +44,8 @@ struct Virtual_Rect
     PropertyAccessors(RectPtr,
                       
         // Give the real RectPtr structure a name so we can assign to it.
-		UnionMember(RectPtr rect_ptr;),
-	
+        UnionMember(RectPtr rect_ptr;),
+    
         // Proxy (reference) property accessors
         Proxy  (int,  x1,     rect->x1),
         Proxy  (int,  x2,     rect->x1),
@@ -99,7 +99,7 @@ struct Virtual_Rect
     struct acc_area : RectPtr {int get() const {return rect->area();}};
     
     // Property accessors 
-	union
+    union
     {
         // Give the real RectPtr structure a name so we can assign to it.
         RectPtr                       rect_ptr;
@@ -110,7 +110,7 @@ struct Virtual_Rect
         property_accessor<acc_y1>     y1;
         property_accessor<acc_y2>     y2;
         
-		// Value (get/set by copy) property accessors
+        // Value (get/set by copy) property accessors
         property_accessor<acc_width>  width;
         property_accessor<acc_height> height;
         property_accessor<acc_area>   area;
@@ -131,8 +131,8 @@ void PrintVRect(const Virtual_Rect &vrect)
 {
     // Properties support iostreams and acting as right-hand operands in general.
     std::cout << "VRect: {"
-			<< vrect.x1 << "," << vrect.y1 << ", "
-        	<< vrect.x2 << "," << vrect.y2 << "} "
+            << vrect.x1 << "," << vrect.y1 << ", "
+            << vrect.x2 << "," << vrect.y2 << "} "
         << vrect.width << "x" << vrect.height << " = " << vrect.area
         << " ... width+height = " << (vrect.width+vrect.height) << std::endl;
 }
@@ -149,7 +149,7 @@ int main(int argc, char **argv)
     vrect.width += 2;
     vrect.height += 3;
     
- 	// We can't manipulate area because it's a get-only property.
+    // We can't manipulate area because it's a get-only property.
     //vrect.area = 7;  <-- this line won't compile!
 
     PrintVRect(vrect);
@@ -171,7 +171,7 @@ This specialization must be placed in the global namespace, and must be visible 
 
 struct Rect
 {
-	int x1, x2, y1, y2;
+    int x1, x2, y1, y2;
     
     int area() const    {return (x2-x1) * (y2-y1);}
 };
@@ -195,17 +195,17 @@ We can specialize the mimic template ourselves.  The `property_access::member` t
 // Make Rect-type properties work more like the real thing.
 template<typename GetSet_t> struct property_access::mimic<Rect, GetSet_t>
 {
-	union
-	{
-    	// This variable is required in any specialization of property_access::mimic.
-		GetSet_t _property_getset;
+    union
+    {
+        // This variable is required in any specialization of property_access::mimic.
+        GetSet_t _property_getset;
 
         // These accessors automatically extend proxy or value access to Rect's members.
-		property_access::member<GetSet_t, int, &Rect::x1> x1;
-		property_access::member<GetSet_t, int, &Rect::y1> y1;
-		property_access::member<GetSet_t, int, &Rect::x2> x2;
-		property_access::member<GetSet_t, int, &Rect::y2> y2;
-	};
+        property_access::member<GetSet_t, int, &Rect::x1> x1;
+        property_access::member<GetSet_t, int, &Rect::y1> y1;
+        property_access::member<GetSet_t, int, &Rect::x2> x2;
+        property_access::member<GetSet_t, int, &Rect::y2> y2;
+    };
     
     // Forward the area() method.
     int area() const    {return _property_getset.get().area();}
@@ -240,14 +240,14 @@ Supported operators may be used on any property referring to a value that suppor
 
 These operators are supported by all property accessors:
 
-​	`() []  + - * / %  << >>  == != > >= < <=  ! ~ | & ^`
+​    `() []  + - * / %  << >>  == != > >= < <=  ! ~ | & ^`
 
 * **Proxy** accessors forward these operators to the referenced object.
 * **Value** accessors apply these operators to the result of their `get` function.  <span style="background-color: yellow;">`set` is not invoked even if the value was changed</span>.
 
 These operators are supported by proxy property accessors and settable value property accessors:
 
-​	`=  += -= *= /= %=  <<= >>=  &= |= ^=  ++ --`
+​    `=  += -= *= /= %=  <<= >>=  &= |= ^=  ++ --`
 
 * **Proxy** accessors forward any assignment or increment operators to the referenced object.
 
