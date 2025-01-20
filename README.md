@@ -63,7 +63,8 @@ struct Virtual_Rect
 };
 ```
 
-<details> <summary><strong>See how to declare property accessors without macros</strong>, for more control.</summary>
+<details> <summary><u>See how to declare property accessors without macros</u>, for more control.</summary>
+<blockquote>
 
 Under the hood, property accessors are based on getter/setter types.  Each of these inherits from the 'actual' data type, in this case `RectPtr`.  Proxy accessors only need a get() function returning a reference.  Value accessors use a get() function and optionally also a set() function.  Finally, we declare a union with property accessors using each of our getter/setter types.
 
@@ -120,7 +121,7 @@ As a middle ground, it's also possible to use the `Custom` option in the `Proper
 
 -----
 
-</details>
+</blockquote></details>
 
 The properties of the resulting class act like regular member variables of type `int`.  Math operators and other operator-based logic will work automatically:
 
@@ -180,7 +181,8 @@ PropertyAccess_Mimic(Rect,
     Methods(area));
 ```
 
-<details> <summary><strong>See how to do this without macros</strong>.
+<details> <summary><u>See how to do this without macros</u>.<summary>
+<blockquote>
 
 
 We can specialize the mimic template ourselves.  The `property_access::member` template handles access to member variables.  When forwarding member functions, we use `_property_getset.get()` which returns either a value or reference depending on whether the specialization is applied to a proxy property or a value property.
@@ -208,9 +210,7 @@ template<typename GetSet_t> struct property_access::mimic<Rect, GetSet_t>
 };
 ```
 
-------
-
-</summary>
+</blockquote></details>
 
 We can even change mimicked variables on a get-set property.  In this case, a temporary copy of the property value will be made, its member variable will be changed, and the setter will be called with the modified property value.
 
