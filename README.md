@@ -189,7 +189,11 @@ PropertyAccess_Mimic(Rect,
 
 We can specialize the mimic template ourselves.  The `property_access::member` template handles access to member variables.  When forwarding member functions, we use `_property_getset.get()` which returns either a value or reference depending on whether the specialization is applied to a proxy property or a value property.
 
-Defining this class yourself provides more control over how forwarding methods are defined and enables some features that property accessors might not otherwise have — such as additional conversion operators and explicitly templated member functions.
+Defining this class yourself provides more control over how forwarding methods are defined and enables some features that property accessors do not otherwise <mark>(currently)</mark> support:
+
+* Member functions that mutate a value property.
+* Explicitly-templated member functions, e.g. `get_component<TextComponent>()`
+* Conversion operators.
 
 ```c++
 #include <property_accessor_nomacros.h>

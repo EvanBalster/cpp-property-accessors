@@ -255,8 +255,8 @@ namespace property_access
 	{
 		using property_t = proxy<getset_member>;
 
-		Member_t& get() const    {return this->GetSet_t::get().*PointerToMember;}
-		Member_t& get()          {return this->GetSet_t::get().*PointerToMember;}
+		auto& get() const    {return this->GetSet_t::get().*PointerToMember;}
+		auto& get()          {return this->GetSet_t::get().*PointerToMember;}
 	};
 
 	// member get/set implementation used when the object is accessed by copy through a value property accessor.
