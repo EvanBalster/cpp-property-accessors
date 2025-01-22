@@ -1,7 +1,7 @@
 # Property Accessors for C++
 *Developed in a fugue state by Evan Balster, January 2025*
 
-This is a header-only library implementing zero-overhead **property accessors** — that is, synthetic variables which are actually provided by getter and/or setter functions.
+This is a header-only library implementing zero-overhead **property accessors** — that is, entities that look like variables but are actually just a `get()` and/or `set(...)` function in disguise.
 
 Property accessors are commonly used to make members of one class look like members of another class that refers to it, or to provide multiple mutable representations of the same information.  This syntactic sugar is a popular feature of other high-level languages such as C# but sadly hasn't been accepted into standard C++.
 
@@ -13,13 +13,54 @@ Property accessors are commonly used to make members of one class look like memb
 * **Zero runtime overhead** when compiled with optimization.
 * **Proxy property accessors** based on reference expressions, for concealing indirection.
 * **Value property accessors** based on "get" and/or "set" expressions, for alternative representations of data.
-* **Property member access** via `->`, or via `.` member access using a `mimic` specialization.
-* **Full operator support**, behaving as if the property accessor were replaced by value.
-* **Full const-correctness support**.
+* **Type emulation** allows properties to behave almost exactly like member variables.
+  * **Class member access** via `->`, or via `.` member access using a `mimic` specialization.
+  * **Full operator support**, behaving as if the property accessor were replaced by value.
+  * **Full const-correctness support**.
 
-### Example
 
-Suppose we want a nicer interface to this bare-bones data structure:
+## Core Concept: Proxy Accessors
+
+Proxy property accessors are based on a **reference getter** that returns an lvalue reference to some value or object.  This reference may be const.  Here's a working example:
+
+```c++
+struct actual_data_t {Object *object;}
+
+struct getter_x : actual_data_t
+{
+    int& get() const {return object->x;}
+};
+
+using accessor_x = property_accessor<getter_x>;
+```
+
+These are useful for making something look like a member of your class when it's actually part of another object.  This can help to make code more concise without adding redundant references to your objects.
+
+For the most part, a proxy accessor can be treated like a variable of reference type identical to what is returned by `get`.
+
+## Core Concept: Value Accessors
+
+Value property accessors are based on a **value getter** function and optional **value setter** function.
+
+```c++
+struct actual_data_t {int x;}
+
+struct getter_negative_x : actual_data_t
+{
+    int get() const          {return -x;}
+    void set(int negative_x) {x = -negative_x;}
+};
+
+using accessor_x = property_accessor<getter_x>;
+```
+
+These are useful for exposing multiple representations of data — for example, representing an angle in both degrees and radians.  They can be used to encapsulate the real representation of your data so it can be changed later on.
+
+For the most part, a value accessor works like a regular variable of the getter's return type — except that access by reference is not possible (because a copy of the value is made whenever it is read).  If the value is settable, it supports compound assignments and incrementations as well as modification of mimicked members by making a temporary copy behind the scenes.
+
+## Example
+
+Here is a contrived example using both proxy and value access.  Suppose we want a nicer interface to this bare-bones data structure:
 
 ```c++
 struct Rect
@@ -41,6 +82,7 @@ struct Virtual_Rect
 {
     struct RectPtr {Rect *rect;};
 
+    //
     PropertyAccessors(RectPtr,
                       
         // Give the real RectPtr structure a name so we can assign to it.
@@ -66,6 +108,7 @@ struct Virtual_Rect
 <blockquote>
 
 <details> <summary>🔎 <strong>See how to declare property accessors without macros</strong>, for more control.</summary>
+
 
 Under the hood, property accessors are based on getter/setter types.  Each of these inherits from the 'actual' data type, in this case `RectPtr`.  Proxy accessors only need a get() function returning a reference.  Value accessors use a get() function and optionally also a set() function.  Finally, we declare a union with property accessors using each of our getter/setter types.
 
@@ -120,6 +163,8 @@ struct Virtual_Rect
 
 As a middle ground, it's also possible to use the `Custom` option in the `PropertyAccessors` macro.  This allows you to define your own `get` and `set` functions and handles the rest automatically.
 
+------
+
 </details>
 
 </blockquote>
@@ -160,11 +205,11 @@ Property accessors could also be added to the `Rect` object directly, giving it 
 
 It would be similarly possible to put these properties directly into `Rect`, except we would need to place its member variables inside the union with the properties that access them.
 
-### Feature: Property Member Access
+## Feature: Class Member Emulation
 
-If a property accessor refers to a class or struct type, any member variables or methods of that class must be accessed with `->`.  We can overcome this limitation with a specialization called a "mimic", which provides dot `.` access to listed members.
+If a property accessor refers to a class, struct or union type, any member variables or methods of that class can be accessed with `->`.  In the case of value accessors, this uses a temporary copy of the property's value.
 
-This specialization must be placed in the global namespace, and must be visible to any code declaring a property accessor using the type in question.  When possible, it's best to place our mimic declaration right after the type in question.
+If we want properties that behave like class values instead of class pointers, we can use a specialization called a "mimic" to enable dot `.` access to listed members.  This specialization must be placed in the global namespace, and must be visible to any code declaring a property accessor using the type in question.  When possible, it's best to place our mimic declaration right after the type in question.
 
 ```c++
 #include <property_accessor.h>
@@ -227,34 +272,20 @@ namespace property_access
 
 We can even change mimicked variables on a get-set property.  In this case, a temporary copy of the property value will be made, its member variable will be changed, and the setter will be called with the modified property value.
 
-### Feature: Proxy Accessors
+## Operator Overloading
 
-Proxy property accessors are based on a getter function that returns an lvalue reference to some value or object.  This reference may be const.
-
-These are useful for making something look like a member of your class when it's actually part of another object.  For example, the variables of an entity may be made to appear as variables of all its components.
-
-Proxy accessors are both reference-like and pointer-like.  They may be implicitly converted to a reference or pointer.  They support dereferencing with `*` and accessing members of the referent with `->`.
-
-### Feature: Value Accessors
-
-Value property accessors are based on a getter function (returning a non-reference value) and a setter function.  Copies of the property's value are made whenever it is accessed.  If the value is settable, it supports compound assignments and incrementations as well as modification of mimicked members by making a temporary copy behind the scenes.
-
-These are useful for exposing multiple representations of data — for example, representing an angle in both degrees and radians.  They can be used to implement encapsulation of private variables while leaving client
-
-Value accessors can be implicitly cast to their value type.  They support some limited pointer semantics for consistency with proxy accessors.  They can be dereferenced (to a value) using the `*` operator.  The `->` operator can also be used (it works by creating a temporary copy of the value).  All of these functions
-
-### Operator Overloading
-
-Supported operators may be used on any property referring to a value that supports those operators.  The result will be as if the property's result
+With just a few exceptions, property accessors will react to operators just like the value or reference they refer to.
 
 These operators are supported by all property accessors:
 
 ​    `() []  + - * / %  << >>  == != > >= < <=  ! ~ | & ^`
 
 * **Proxy** accessors forward these operators to the referenced object.
-* **Value** accessors apply these operators to the result of their `get` function.  <mark>`set` is not invoked even if the value was changed</mark>.
+* **Value** accessors apply these operators to the result of their `get` function.
+  <mark>`set` is not invoked as these operators are not expected to modify the value.</mark>.
+* C++23's multi-dimensional subscript operator is supported.
 
-These operators are supported by proxy property accessors and settable value property accessors:
+These operators are supported by proxy property accessors and *settable* value property accessors:
 
 ​    `=  += -= *= /= %=  <<= >>=  &= |= ^=  ++ --`
 
