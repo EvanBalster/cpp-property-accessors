@@ -56,6 +56,18 @@ namespace property_access
 	template<typename GetSet_t, typename Y>
 	static constexpr bool has_setter = has_setter_impl<GetSet_t, Y>::value;
 
+	namespace detail
+	{
+		template<typename To, typename GetterResult_t>
+		static constexpr bool prohibit_fwd_convert_v = std::is_rvalue_reference_v<To> || std::is_same_v<std::decay_t<GetterResult_t>, std::decay_t<To>>;
+
+		template<typename To, typename GetterResult_t>
+		static constexpr bool forward_convert_v          = !prohibit_fwd_convert_v<To, GetterResult_t> && std::is_constructible_v<To, GetterResult_t>;
+
+		template<typename To, typename GetterResult_t>
+		static constexpr bool forward_convert_implicit_v = !prohibit_fwd_convert_v<To, GetterResult_t> && std::is_convertible_v<GetterResult_t, To>;
+	}
+
 
 	/*
 		Specializable base type for all property accessors.  This is a customization point
@@ -125,6 +137,24 @@ namespace property_access
 		std::enable_if_t<Enable, getter_result_t<const GetSet_t>> operator()() const    {return this->_property_get();}
 		template<bool Enable=!std::is_invocable_v<getter_result_t<      GetSet_t>>>
 		std::enable_if_t<Enable, getter_result_t<      GetSet_t>> operator()()          {return this->_property_get();}
+
+		/*
+			Forward conversion operators to the property value.
+				Support for explicit conversion operators requires C++20.
+		*/
+#if __cplusplus >= 202000L || _MSVC_LANG >= 202000L
+		template<typename T, typename = std::enable_if_t<detail::forward_convert_v<T, getter_result_t<const GetSet_t>>>>
+		explicit(!detail::forward_convert_implicit_v<T, getter_result_t<const GetSet_t>>)
+		operator T() const    {return T(this->_property_get());}
+		template<typename T, typename = std::enable_if_t<detail::forward_convert_v<T, getter_result_t<      GetSet_t>>>>
+		explicit(!detail::forward_convert_implicit_v<T, getter_result_t<      GetSet_t>>)
+		operator T()          {return T(this->_property_get());}
+#else
+		template<typename T, typename = std::enable_if_t<detail::forward_convert_implicit_v<T, getter_result_t<const GetSet_t>>>>
+		operator T() const             {return   this->_property_get();}
+		template<typename T, typename = std::enable_if_t<detail::forward_convert_implicit_v<T, getter_result_t<      GetSet_t>>>>
+		operator T()                   {return   this->_property_get();}
+#endif
 
 		/*
 			Forward function-call operator and array subscript operator.
