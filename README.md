@@ -1,7 +1,7 @@
 # Property Accessors for C++
 *Developed in a fugue state by Evan Balster, January 2025*
 
-This is a header-only library implementing zero-overhead **property accessors** — that is, entities that look like variables but are actually just a `get()` and/or `set(...)` function in disguise.
+This is a header-only library implementing zero-overhead **property accessors** — that is, entities that look like variables but are actually just a `get()` and/or `set(...)` function in disguise.  It requires a C++17 compiler.
 
 Property accessors are commonly used to make members of one class look like members of another class that refers to it, or to provide multiple mutable representations of the same information.  This syntactic sugar is a popular feature of other high-level languages such as C# but sadly hasn't been accepted into standard C++.
 
@@ -14,7 +14,9 @@ Property accessors are commonly used to make members of one class look like memb
 * **Proxy property accessors** based on reference expressions, for concealing indirection.
 * **Value property accessors** based on "get" and/or "set" expressions, for alternative representations of data.
 * **Type emulation** allows properties to behave almost exactly like member variables.
-  * **Class member access** via `->`, or via `.` member access using a `mimic` specialization.
+  * **Class member access** when a property refers to a class/struct/union type.
+    * via `.` if a specialization is declared
+    * via `->` otherwise (pointer emulation)
   * **Full operator support**, behaving as if the property accessor were replaced by value.
   * **Full const-correctness support**.
 
@@ -205,11 +207,11 @@ Property accessors could also be added to the `Rect` object directly, giving it 
 
 It would be similarly possible to put these properties directly into `Rect`, except we would need to place its member variables inside the union with the properties that access them.
 
-## Feature: Class Member Emulation
+## Type Emulation: Class Member Access
 
-If a property accessor refers to a class, struct or union type, any member variables or methods of that class can be accessed with `->`.  In the case of value accessors, this uses a temporary copy of the property's value.
+If a property accessor refers to a `class`, `struct` or `union` type, then it will perform **pointer emulation** by default — meaning any member variables or methods of that class can be accessed with `->` and the object itself can be accessed with the `*` dereference operator.  Other operators and conversions will still behave as if the property represents the object.
 
-If we want properties that behave like class values instead of class pointers, we can use a specialization called a "mimic" to enable dot `.` access to listed members.  This specialization must be placed in the global namespace, and must be visible to any code declaring a property accessor using the type in question.  When possible, it's best to place our mimic declaration right after the type in question.
+If we want properties that behave like class values instead of class pointers, we can declare a template specialization to enable dot `.` access to listed members.  A macro is provided for convenience.  This specialization must be placed in the global namespace, and must be visible to any code declaring a property accessor using the type in question.  When possible, it's best to place it right after the type in question.  By default, declaring a specialization will disable pointer emulation.
 
 ```c++
 #include <property_accessor.h>
@@ -221,8 +223,8 @@ struct Rect
     int area() const    {return (x2-x1) * (y2-y1);}
 };
 
-// Make Rect-type property accessors work more like the real thing.
-PropertyAccess_Mimic(Rect,
+// Expose members of the Rect type as members of their property accessors.
+PropertyAccess_Members(Rect,
     Variables(x1, y1, x2, y2),
     Methods(area));
 ```
@@ -270,42 +272,39 @@ namespace property_access
 
 </blockquote>
 
-We can even change mimicked variables on a get-set property.  In this case, a temporary copy of the property value will be made, its member variable will be changed, and the setter will be called with the modified property value.
+Assigning to member variables through a property works.  In this case, a temporary copy of the property value will be made, its member variable will be changed, and the setter will be called with the modified property value.
 
-## Operator Overloading
+## Type Emulation: Operator Overloading
 
 With just a few exceptions, property accessors will react to operators just like the value or reference they refer to.
 
-These operators are supported by all property accessors:
+* **Proxy** accessors forward supported operators to the reference returned by their `get` function.
+* **Value** accessors obtain a value from their `get` function and apply the operator to it.  If the operator is an assignment or increment, they subsequently call their `set` function with the modified value.
 
-​    `() []  + - * / %  << >>  == != > >= < <=  ! ~ | & ^`
+| Operators                                                    | Proxy<br />Access | Value<br />Access | Notes                                                        |
+| ------------------------------------------------------------ | ----------------- | ----------------- | ------------------------------------------------------------ |
+| Implicit conversions                                         | ✅                 | ✅                 |                                                              |
+| Explicit conversions                                         | ⚠️                 | ⚠️                 | Requires C++20 to work automatically.<br />Otherwise, enable it with class member specialization. |
+| Function call `()`                                           | ✅                 | ✅ †               | including C++23 multidimensional subscript.                  |
+| Subscript `[]`                                               | ✅                 | ✅ †               |                                                              |
+| Math `+ - * / % << >>`                                       | ✅                 | ✅ †               |                                                              |
+| Bitwise `~ | & ^`                                            | ✅                 | ✅ †               |                                                              |
+| Logical `!`                                                  | ✅                 | ✅                 |                                                              |
+| Logical `&& ||`                                              | ❌                 | ❌                 | These rare operators can create logic errors.<br />Enable them with a class member specialization. |
+| Assignment `=`                                               | ✅                 | ✅                 |                                                              |
+| Compound Assignment<br />`+= -= *= /= %=`<br />`<<= >>=  &= |= ^=` | ✅                 | ✅                 | value accessors make a temporary copy,<br />compound-assign it and call `set`. |
+| Pre-Increment `++ --`<br />Post-Increment `++ --`            | ✅                 | ✅                 | value accessors make a temporary copy,<br />increment it and call `set`. |
+| Pointer `* -> ->*`                                           | ⚠️ ‡               | ⚠️ ‡               | Special behavior for unspecialized class types.<br />See "Class Member Access". |
+| Address-of `&`                                               | ✅                 | ❌                 | Enable for values via specialization.                        |
+| `,`                                                          | ❌                 | ❌                 | This rare operator can create logic errors.<br />Enable it with a class member specialization. |
+| `new delete new[] delete[]`                                  | ❌                 | ❌                 | accessors are not typically allocated.                       |
 
-* **Proxy** accessors forward these operators to the referenced object.
-* **Value** accessors apply these operators to the result of their `get` function.
-  <mark>`set` is not invoked as these operators are not expected to modify the value.</mark>.
-* C++23's multi-dimensional subscript operator is supported.
+† In the case of value property accessors, these operator are applied to the result of the `get` function.  `set` is not invoked.
 
-These operators are supported by proxy property accessors and *settable* value property accessors:
+❌ Unsupported operators may be enabled manually by declaring them in your class member template specialization.
 
-​    `=  += -= *= /= %=  <<= >>=  &= |= ^=  ++ --`
+## Type Emulation: Const Correctness
 
-* **Proxy** accessors forward any assignment or increment operators to the referenced object.
+Property accessors will preserve the `const` semantics of the getters and setters used to define them when forwarding operators and function calls.  <mark>In the case of value property accessors, operators other than assignments, compound assignments and increments will not invoke `set`.</mark>
 
-* **Value** accessors make a temporary value, assign or increment it, and invoke `set` with the modified value.
-
-The following operators are not forwarded to destination values, for the reasons stated.
-
-* `& ->*` — <mark>Support for forwarding these operators may be added in the future as use-cases become clearer.</mark>
-* `* ->` — Used to dereference properties and access their values.  <mark>Support may be added if use-cases become clearer.</mark>
-* `, && ||` — Rarely-used operators with a high likelihood of creating logic errors.  Support is not planned.
-* `new delete new[] delete[]` — Property accessors should never be independently allocated or deleted.
-
-### Const Correctness
-
-Property accessors will preserve the `const` semantics of the getters and setters used to define them.
-
-The `PropertyAccessors` macro declares all `get` functions const and all `set` functions non-const.  To make a settable property behave like a `mutable` member, you'll need to define its property 
-
-There is some room for improvement with regard to const-correctness.  The predecessor to this library only supported proxy property accessors, so there is a tendency toward assuming const qualification.
-
-<mark>In the case of value property accessors, operators other than assignments, compound assignments and increments will not invoke `set`.</mark>
+The `PropertyAccessors` macro assumes all `get` functions const and all `set` functions non-const.  To make a settable property behave like a `mutable` member, you'll need to write its `get` and `set` functions with a `Custom(...)` sub-macro or define the property in the macro-less style.
