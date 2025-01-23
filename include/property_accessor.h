@@ -87,7 +87,7 @@
 		This works by template specialization.  The macro must be placed outside any namespace,
 		and must be visible to any property accessor declarations using the specified type.
 
-	TYPE      -- the class/struct/union type to mimic.
+	TYPE      -- the class/struct/union type to specialize.
 	VARIABLES -- either `NoVariables` or `Variables(a,b,c)` replacing a,b,c by member variables to expose.
 	METHODS   -- either `NoMethods` or `Methods(f1,f2,f3)` replacing f1,f2,f3 by member functions to expose.
 
@@ -100,7 +100,7 @@
 		PropertyAccess_Members(vector2D, Variables(x, y), Methods(norm));
 */
 #define PropertyAccess_Members(TYPE, VARIABLES, METHODS) \
-	template<typename GetSet_t> struct property_access::mimic<TYPE, GetSet_t> { \
+	template<typename GetSet_t> struct property_access::members<TYPE, GetSet_t> { \
 		using _property_class_t = TYPE; \
 		EDB_PropertyMembers_Argument_ ## VARIABLES \
 		EDB_PropertyMembers_Argument_ ## METHODS }
@@ -232,7 +232,7 @@ namespace property_access
 		The memory layout of any specialization must be identical to the type 'GetSet_t'.
 	*/
 	template<typename T, typename GetSet_t, typename Enable = void>
-	struct mimic : public property_base
+	struct members : public property_base
 	{
 		union
 		{
@@ -246,7 +246,7 @@ namespace property_access
 			In order to facilitate access to member variables, we add pointer-like semantics.
 	*/
 	template<typename T, typename GetSet_t>
-	struct mimic<T, GetSet_t, std::enable_if_t<(std::is_class_v<T> || std::is_union_v<T>)>>
+	struct members<T, GetSet_t, std::enable_if_t<(std::is_class_v<T> || std::is_union_v<T>)>>
 	{
 		union
 		{
@@ -273,13 +273,13 @@ namespace property_access
 		Implementation details shared by all property accessors.
 	*/
 	template<typename GetSet_t>
-	struct common : public mimic<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>
+	struct common : public members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>
 	{
 		/*
-			Validate any specialization of mimic<T,GetSet>.
+			Validate any specialization of members<T,GetSet>.
 		*/
-		static_assert(sizeof (mimic<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>) == sizeof (GetSet_t));
-		static_assert(alignof(mimic<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>) == alignof(GetSet_t));
+		static_assert(sizeof (members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>) == sizeof (GetSet_t));
+		static_assert(alignof(members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>) == alignof(GetSet_t));
 
 		static constexpr bool
 			_property_option_pointer_emulation = detail::option_pointer_emulation<common>::value;
@@ -448,7 +448,7 @@ namespace property_access
 
 	/*
 		A get/set rule for a member of some object represented by another property accessor.
-			Useful for implementing specializations of the mimic template.
+			Useful for implementing specializations of the members template.
 	*/
 	template<typename GetSet_t, auto PointerToMember, typename Enable = void>
 	struct getset_member;

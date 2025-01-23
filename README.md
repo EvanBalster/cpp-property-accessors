@@ -58,7 +58,7 @@ using accessor_x = property_accessor<getter_x>;
 
 These are useful for exposing multiple representations of data — for example, representing an angle in both degrees and radians.  They can be used to encapsulate the real representation of your data so it can be changed later on.
 
-For the most part, a value accessor works like a regular variable of the getter's return type — except that access by reference is not possible (because a copy of the value is made whenever it is read).  If the value is settable, it supports compound assignments and incrementations as well as modification of mimicked members by making a temporary copy behind the scenes.
+For the most part, a value accessor works like a regular variable of the getter's return type — except that access by reference is not possible (because a copy of the value is made whenever it is read).  If the value is settable, it supports compound assignments and incrementations.  If the value represents a class and member access has been specialized (see below) you may also perform assignments, compound assignments and increments on the value's members.
 
 ## Example
 
@@ -234,7 +234,7 @@ PropertyAccess_Members(Rect,
 
 
 
-We can specialize the mimic template ourselves.  The `property_access::member` template handles access to member variables.  When forwarding member functions, we use `_property_getset.get()` which returns either a value or reference depending on whether the specialization is applied to a proxy property or a value property.
+We can specialize the `members` template ourselves.  The `property_access::member` template handles access to member variables.  When forwarding member functions, we use `_property_getset.get()` which returns either a value or reference depending on whether the specialization is applied to a proxy property or a value property.
 
 Defining this class yourself provides more control over how forwarding methods are defined and enables some features that property accessors do not otherwise <mark>(currently)</mark> support:
 
@@ -248,11 +248,11 @@ Defining this class yourself provides more control over how forwarding methods a
 // Make Rect-type properties work more like the real thing.
 namespace property_access
 {
-    template<typename GetSet_t> struct mimic<Rect, GetSet_t>
+    template<typename GetSet_t> struct members<Rect, GetSet_t>
     {
         union
         {
-            // This variable is required in any specialization of property_access::mimic.
+            // This variable is required in any specialization of property_access::members.
             GetSet_t _property_getset;
 
             // These accessors automatically extend proxy or value access to Rect's members.
