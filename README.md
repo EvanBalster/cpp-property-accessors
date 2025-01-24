@@ -117,7 +117,8 @@ Under the hood, property accessors are based on getter/setter types.  Each of th
 Compared to using the macro, this approach provides more control over `const` semantics.  For example, we could choose to add a `const` qualifier to the `set` methods for accessing `width` and `height`.  This would allow 
 
 ```c++
-#include <property_accessor_nomacros.h>
+#define PROPERTY_ACCESS_NO_MACROS
+#include <property_accessor.h>
 
 struct Virtual_Rect
 {
@@ -243,7 +244,8 @@ Defining this class yourself provides more control over how forwarding methods a
 * Conversion operators.
 
 ```c++
-#include <property_accessor_nomacros.h>
+#define PROPERTY_ACCESS_NO_MACROS
+#include <property_accessor.h>
 
 // Make Rect-type properties work more like the real thing.
 namespace property_access

@@ -22,129 +22,122 @@
 #include <type_traits>
 
 
+#if !defined(PROPERTY_ACCESS_NO_MACROS)
 
-/*
-	PropertyAccessors(ACTUAL_STRUCT, ...) generates a group of property accessors.
-		This macro encapsulates the complete function of this library.
+	/*
+		PropertyAccessors(ACTUAL_STRUCT, ...) generates a group of property accessors.
+			This macro encapsulates the complete function of this library.
 
-	The first argument ACTUAL_STRUCT refers to a struct type containing the actual variables,
-		which will be accessible in all subsequent EXPRESSIONs.
-		Note: you may define an unnamed struct inline but it must not contain commas.
+		The first argument ACTUAL_STRUCT refers to a struct type containing the actual variables,
+			which will be accessible in all subsequent EXPRESSIONs.
+			Note: you may define an unnamed struct inline but it must not contain commas.
 
-	Each subsequent argument must be one of the following pseudo-macros.  Up to 69 may be used.
+		Each subsequent argument must be one of the following pseudo-macros.  Up to 69 may be used.
 
-	Proxy  (TYPE, NAME, REF_EXPRESSION)                                -- Proxy (reference) property.
-	GetOnly(TYPE, NAME, GET_EXPRESSION)                                -- Read-only value property.
-	GetSet (TYPE, NAME, GET_EXPRESSION, SET_PARAMETER, SET_EXPRESSION) -- Read-write value property.
-	Custom (NAME, ...GET/SET...)                                       -- property based on custom getter/setter.
-	UnionMember(...)                                  -- Adds declarations verbatim to the union.  Use with care!
+		Proxy  (TYPE, NAME, REF_EXPRESSION)                                -- Proxy (reference) property.
+		GetOnly(TYPE, NAME, GET_EXPRESSION)                                -- Read-only value property.
+		GetSet (TYPE, NAME, GET_EXPRESSION, SET_PARAMETER, SET_EXPRESSION) -- Read-write value property.
+		Custom (NAME, ...GET/SET...)                                       -- property based on custom getter/setter.
+		UnionMember(...)                                  -- Adds declarations verbatim to the union.  Use with care!
 
-	Arguments to these macros are as follows:
+		Arguments to these macros are as follows:
 
-	TYPE           -- the type referenced and imitated by this property.  Do not include trailing &.
-	NAME           -- the name of this property accessor.
-	REF_EXPRESSION -- an expression yielding an lvalue reference to TYPE, using variables from ACTUAL_STRUCT.
-	GET_EXPRESSION -- an expression returning a value of type TYPE, using variables from ACTUAL_STRUCT.
-	SET_PARAMETER  -- a parameter declaration for the set expression.
-	SET_EXPRESSION -- an expression that changes the value to SET_PARAMETER.
-	...GET/SET...  -- implement any number of get() and set() methods yourself, using variables from ACTUAL_STRUCT.
-	*                 (Custom properties enable greater control over const correctness and overloading set())
+		TYPE           -- the type referenced and imitated by this property.  Do not include trailing &.
+		NAME           -- the name of this property accessor.
+		REF_EXPRESSION -- an expression yielding an lvalue reference to TYPE, using variables from ACTUAL_STRUCT.
+		GET_EXPRESSION -- an expression returning a value of type TYPE, using variables from ACTUAL_STRUCT.
+		SET_PARAMETER  -- a parameter declaration for the set expression.
+		SET_EXPRESSION -- an expression that changes the value to SET_PARAMETER.
+		...GET/SET...  -- implement any number of get() and set() methods yourself, using variables from ACTUAL_STRUCT.
+		*                 (Custom properties enable greater control over const correctness and overloading set())
 
-	e.g:
+		e.g:
 
-		struct Object
-		{
-			int x;
-			int mass() const {return 5+x*10;}
-		};
-		struct MyObjectPtr {Object *object;};
+			struct Object
+			{
+				int x;
+				int mass() const {return 5+x*10;}
+			};
+			struct MyObjectPtr {Object *object;};
 
-		PropertyAccessors(MyObjectPtr,
+			PropertyAccessors(MyObjectPtr,
 
-			// Adding this declaration to the union makes the object pointer visible as a class member.
-			UnionMember(Object *object;),
+				// Adding this declaration to the union makes the object pointer visible as a class member.
+				UnionMember(Object *object;),
 
-			// This property acts as a reference to x and can be treated like an int.
-			Proxy  (int, x,    object->x),
+				// This property acts as a reference to x and can be treated like an int.
+				Proxy  (int, x,    object->x),
 
-			// This read-only property makes the mass() function look like a const int.
-			GetOnly(int, mass, object->mass()),
+				// This read-only property makes the mass() function look like a const int.
+				GetOnly(int, mass, object->mass()),
 
-			// Two different ways to implement a get-set property.
-			GetSet (int, x_times_2,                          object->x*2,           int x2,  object->x = x2/2),
-			Custom (     x_times_3,  int get() const {return object->x*3;} void set(int x3) {object->x = x3/3;})
-		);
-*/
-#define PropertyAccessors(ACTUAL_STRUCT, ...) \
-	\
-	struct _properties {using _property_actual_t = ACTUAL_STRUCT;  EDB_PP_MAP(EDB_PropertyAccessors_Setup, __VA_ARGS__) };\
-	union {      _properties::_property_actual_t _property_actual; EDB_PP_MAP(EDB_PropertyAccessors_Union, __VA_ARGS__) }
-
-
-/*
-	This macro enables property accessors to more closely mimic objects by enabling the dot operator (.)
-		for listed member variables and member functions.
-		This works by template specialization.  The macro must be placed outside any namespace,
-		and must be visible to any property accessor declarations using the specified type.
-
-	TYPE      -- the class/struct/union type to specialize.
-	VARIABLES -- either `NoVariables` or `Variables(a,b,c)` replacing a,b,c by member variables to expose.
-	METHODS   -- either `NoMethods` or `Methods(f1,f2,f3)` replacing f1,f2,f3 by member functions to expose.
-
-	This macro supports forwarding up to 69 variables and 69 methods.
-
-	e.g:
-
-		struct vector2D {float x, y;  float norm() const {return x*x + y*y;}};
-
-		PropertyAccess_Members(vector2D, Variables(x, y), Methods(norm));
-*/
-#define PropertyAccess_Members(TYPE, VARIABLES, METHODS) \
-	template<typename GetSet_t> struct property_access::members<TYPE, GetSet_t> { \
-		using _property_class_t = TYPE; \
-		EDB_PropertyMembers_Argument_ ## VARIABLES \
-		EDB_PropertyMembers_Argument_ ## METHODS }
+				// Two different ways to implement a get-set property.
+				GetSet (int, x_times_2,                          object->x*2,           int x2,  object->x = x2/2),
+				Custom (     x_times_3,  int get() const {return object->x*3;} void set(int x3) {object->x = x3/3;})
+			);
+	*/
+	#define PropertyAccessors(ACTUAL_STRUCT, ...) \
+		\
+		struct _properties {using _property_actual_t = ACTUAL_STRUCT;  EDB_PP_MAP(EDB_PropertyAccessors_Setup, __VA_ARGS__) };\
+		union {      _properties::_property_actual_t _property_actual; EDB_PP_MAP(EDB_PropertyAccessors_Union, __VA_ARGS__) }
 
 
+	/*
+		This macro enables property accessors to more closely mimic objects by enabling the dot operator (.)
+			for listed member variables and member functions.
+			This works by template specialization.  The macro must be placed outside any namespace,
+			and must be visible to any property accessor declarations using the specified type.
 
-/*
-	=========================================================================================================
-	=========================================================================================================
-	The remainder of this file is implementation detail.
-	=========================================================================================================
-	=========================================================================================================
-*/
+		TYPE      -- the class/struct/union type to specialize.
+		VARIABLES -- either `NoVariables` or `Variables(a,b,c)` replacing a,b,c by member variables to expose.
+		METHODS   -- either `NoMethods` or `Methods(f1,f2,f3)` replacing f1,f2,f3 by member functions to expose.
+
+		This macro supports forwarding up to 69 variables and 69 methods.
+
+		e.g:
+
+			struct vector2D {float x, y;  float norm() const {return x*x + y*y;}};
+
+			PropertyAccess_Members(vector2D, Variables(x, y), Methods(norm));
+	*/
+	#define PropertyAccess_Members(TYPE, VARIABLES, METHODS) \
+		template<typename GetSet_t> struct property_access::members<TYPE, GetSet_t> { \
+			using _property_class_t = TYPE; \
+			EDB_PropertyMembers_Argument_ ## VARIABLES \
+			EDB_PropertyMembers_Argument_ ## METHODS }
 
 
 
-// implementation details of the PropertyAccessors macro.
-#define EDB_PropertyAccessors_Setup(CALL) EDB_PropertyAccessors_Setup_ ## CALL
-#define EDB_PropertyAccessors_Union(CALL) EDB_PropertyAccessors_Union_ ## CALL
+	// implementation details of the PropertyAccessors macro.
+	#define EDB_PropertyAccessors_Setup(CALL) EDB_PropertyAccessors_Setup_ ## CALL
+	#define EDB_PropertyAccessors_Union(CALL) EDB_PropertyAccessors_Union_ ## CALL
 
-#define EDB_PropertyAccessors_Setup_UnionMember(...)
-#define EDB_PropertyAccessors_Setup_Proxy(  TYPE, NAME, REF_EXPR)                      struct _gs_ ## NAME : _property_actual_t {  TYPE& get() const {return (REF_EXPR);}  };
-#define EDB_PropertyAccessors_Setup_GetOnly(TYPE, NAME, GET_EXPR)                      struct _gs_ ## NAME : _property_actual_t {  TYPE  get() const {return (GET_EXPR);}  };
-#define EDB_PropertyAccessors_Setup_GetSet( TYPE, NAME, GET_EXPR, SET_PARAM, SET_EXPR) struct _gs_ ## NAME : _property_actual_t {  TYPE  get() const {return (GET_EXPR);}  void set(SET_PARAM) {(SET_EXPR);}  };
-#define EDB_PropertyAccessors_Setup_Custom(NAME, ...)                                  struct _gs_ ## NAME : _property_actual_t {__VA_ARGS__};
+	#define EDB_PropertyAccessors_Setup_UnionMember(...)
+	#define EDB_PropertyAccessors_Setup_Proxy(  TYPE, NAME, REF_EXPR)                      struct _gs_ ## NAME : _property_actual_t {  TYPE& get() const {return (REF_EXPR);}  };
+	#define EDB_PropertyAccessors_Setup_GetOnly(TYPE, NAME, GET_EXPR)                      struct _gs_ ## NAME : _property_actual_t {  TYPE  get() const {return (GET_EXPR);}  };
+	#define EDB_PropertyAccessors_Setup_GetSet( TYPE, NAME, GET_EXPR, SET_PARAM, SET_EXPR) struct _gs_ ## NAME : _property_actual_t {  TYPE  get() const {return (GET_EXPR);}  void set(SET_PARAM) {(SET_EXPR);}  };
+	#define EDB_PropertyAccessors_Setup_Custom(NAME, ...)                                  struct _gs_ ## NAME : _property_actual_t {__VA_ARGS__};
 
-#define EDB_PropertyAccessors_Union_UnionMember(...) __VA_ARGS__
-#define EDB_PropertyAccessors_Union_Proxy(  TYPE, NAME, ...) property_access::proxy<_properties::_gs_ ## NAME> NAME;
-#define EDB_PropertyAccessors_Union_GetOnly(TYPE, NAME, ...) property_access::value<_properties::_gs_ ## NAME> NAME;
-#define EDB_PropertyAccessors_Union_GetSet( TYPE, NAME, ...) property_access::value<_properties::_gs_ ## NAME> NAME;
-#define EDB_PropertyAccessors_Union_Custom(NAME, ...)        property_access::value<_properties::_gs_ ## NAME> NAME;
+	#define EDB_PropertyAccessors_Union_UnionMember(...) __VA_ARGS__
+	#define EDB_PropertyAccessors_Union_Proxy(  TYPE, NAME, ...) property_access::proxy<_properties::_gs_ ## NAME> NAME;
+	#define EDB_PropertyAccessors_Union_GetOnly(TYPE, NAME, ...) property_access::value<_properties::_gs_ ## NAME> NAME;
+	#define EDB_PropertyAccessors_Union_GetSet( TYPE, NAME, ...) property_access::value<_properties::_gs_ ## NAME> NAME;
+	#define EDB_PropertyAccessors_Union_Custom(NAME, ...)        property_access::value<_properties::_gs_ ## NAME> NAME;
 
-// Implementation details of the PropertyAccess_Members macro.
-#define EDB_PropertyMembers_Variable(NAME) \
-	property_access::member<GetSet_t, &_property_class_t::NAME> NAME;
+	// Implementation details of the PropertyAccess_Members macro.
+	#define EDB_PropertyMembers_Variable(NAME) \
+		property_access::member<GetSet_t, &_property_class_t::NAME> NAME;
 
-#define EDB_PropertyMembers_Method(METHOD) \
-	template<typename...A> decltype(auto) METHOD(A&&...a) const    {return _property_getset.get().METHOD(std::forward<A>(a)...);} \
-	template<typename...A> decltype(auto) METHOD(A&&...a)          {return _property_getset.get().METHOD(std::forward<A>(a)...);}
+	#define EDB_PropertyMembers_Method(METHOD) \
+		template<typename...A> decltype(auto) METHOD(A&&...a) const    {return _property_getset.get().METHOD(std::forward<A>(a)...);} \
+		template<typename...A> decltype(auto) METHOD(A&&...a)          {return _property_getset.get().METHOD(std::forward<A>(a)...);}
 
-#define EDB_PropertyMembers_Argument_Variables(...) union {GetSet_t _property_getset; EDB_PP_MAP(EDB_PropertyMembers_Variable, __VA_ARGS__)};
-#define EDB_PropertyMembers_Argument_NoVariables    union {GetSet_t _property_getset;};
-#define EDB_PropertyMembers_Argument_Methods(...) EDB_PP_MAP(EDB_PropertyMembers_Method, __VA_ARGS__)
-#define EDB_PropertyMembers_Argument_NoMethods
+	#define EDB_PropertyMembers_Argument_Variables(...) union {GetSet_t _property_getset; EDB_PP_MAP(EDB_PropertyMembers_Variable, __VA_ARGS__)};
+	#define EDB_PropertyMembers_Argument_NoVariables    union {GetSet_t _property_getset;};
+	#define EDB_PropertyMembers_Argument_Methods(...) EDB_PP_MAP(EDB_PropertyMembers_Method, __VA_ARGS__)
+	#define EDB_PropertyMembers_Argument_NoMethods
+
+#endif //!defined(PROPERTY_ACCESS_NO_MACROS)
 
 
 
@@ -511,7 +504,7 @@ namespace property_access
 #define EDB_tmp_FwdRhsOp(OP)         EDB_tmp_FwdRhsOp_(OP, const) EDB_tmp_FwdRhsOp_(OP, )
 #define EDB_tmp_FwdRhsOp_(OP, CONST) \
 	template<typename X, typename GetSet_t, std::enable_if_t<!detail::is_property_accessor_v<X>, bool> = true> \
-    decltype(auto) operator OP(X &&x, CONST common <GetSet_t> &p)  {return (std::forward<X>(x) OP p._property_get());}
+	decltype(auto) operator OP(X &&x, CONST common <GetSet_t> &p)  {return (std::forward<X>(x) OP p._property_get());}
 
 	EDB_tmp_FwdRhsOp(+)   EDB_tmp_FwdRhsOp(-)   EDB_tmp_FwdRhsOp(*)   EDB_tmp_FwdRhsOp(/)
 	EDB_tmp_FwdRhsOp(+=)  EDB_tmp_FwdRhsOp(-=)  EDB_tmp_FwdRhsOp(*=)  EDB_tmp_FwdRhsOp(/=)
@@ -580,6 +573,8 @@ using property_accessor = property_access::property_accessor<GetSet_t>;
 	=========================================================
 */
 
+#if !defined(PROPERTY_ACCESS_NO_MACROS)
+
 // After C++20 we can use __VA_OPT__ and can also visit empty struct
 # ifndef EDB_PP_HAS_VA_OPT
 #   if (defined _MSVC_TRADITIONAL && !_MSVC_TRADITIONAL) || (defined __cplusplus && __cplusplus >= 202000L)
@@ -596,32 +591,32 @@ static constexpr const int max_visitable_members = 69;
 
 #define EDB_EXPAND(x) x
 #define EDB_PP_ARG_N( \
-        _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10,\
-        _11, _12, _13, _14, _15, _16, _17, _18, _19, _20,\
-        _21, _22, _23, _24, _25, _26, _27, _28, _29, _30,\
-        _31, _32, _33, _34, _35, _36, _37, _38, _39, _40,\
-        _41, _42, _43, _44, _45, _46, _47, _48, _49, _50,\
-        _51, _52, _53, _54, _55, _56, _57, _58, _59, _60,\
-        _61, _62, _63, _64, _65, _66, _67, _68, _69, N, ...) N
+		_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10,\
+		_11, _12, _13, _14, _15, _16, _17, _18, _19, _20,\
+		_21, _22, _23, _24, _25, _26, _27, _28, _29, _30,\
+		_31, _32, _33, _34, _35, _36, _37, _38, _39, _40,\
+		_41, _42, _43, _44, _45, _46, _47, _48, _49, _50,\
+		_51, _52, _53, _54, _55, _56, _57, _58, _59, _60,\
+		_61, _62, _63, _64, _65, _66, _67, _68, _69, N, ...) N
 
 #if EDB_PP_HAS_VA_OPT
   #define EDB_PP_NARG(...) EDB_EXPAND(EDB_PP_ARG_N(0 __VA_OPT__(,) __VA_ARGS__,  \
-          69, 68, 67, 66, 65, 64, 63, 62, 61, 60,  \
-          59, 58, 57, 56, 55, 54, 53, 52, 51, 50,  \
-          49, 48, 47, 46, 45, 44, 43, 42, 41, 40,  \
-          39, 38, 37, 36, 35, 34, 33, 32, 31, 30,  \
-          29, 28, 27, 26, 25, 24, 23, 22, 21, 20,  \
-          19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  \
-          9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
+		69, 68, 67, 66, 65, 64, 63, 62, 61, 60,  \
+		59, 58, 57, 56, 55, 54, 53, 52, 51, 50,  \
+		49, 48, 47, 46, 45, 44, 43, 42, 41, 40,  \
+		39, 38, 37, 36, 35, 34, 33, 32, 31, 30,  \
+		29, 28, 27, 26, 25, 24, 23, 22, 21, 20,  \
+		19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  \
+		9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
 #else
   #define EDB_PP_NARG(...) EDB_EXPAND(EDB_PP_ARG_N(0, __VA_ARGS__,  \
-        69, 68, 67, 66, 65, 64, 63, 62, 61, 60,  \
-        59, 58, 57, 56, 55, 54, 53, 52, 51, 50,  \
-        49, 48, 47, 46, 45, 44, 43, 42, 41, 40,  \
-        39, 38, 37, 36, 35, 34, 33, 32, 31, 30,  \
-        29, 28, 27, 26, 25, 24, 23, 22, 21, 20,  \
-        19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  \
-        9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
+		69, 68, 67, 66, 65, 64, 63, 62, 61, 60,  \
+		59, 58, 57, 56, 55, 54, 53, 52, 51, 50,  \
+		49, 48, 47, 46, 45, 44, 43, 42, 41, 40,  \
+		39, 38, 37, 36, 35, 34, 33, 32, 31, 30,  \
+		29, 28, 27, 26, 25, 24, 23, 22, 21, 20,  \
+		19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  \
+		9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
 #endif
 
 /* need extra level to force extra eval */
@@ -701,13 +696,15 @@ static constexpr const int max_visitable_members = 69;
 
 #define EDB_APPLY_F_(M, ...) EDB_EXPAND(M(__VA_ARGS__))
 #if EDB_PP_HAS_VA_OPT
-  #define EDB_PP_MAP(f, ...) EDB_EXPAND(EDB_APPLY_F_(EDB_CONCAT(EDB_APPLYF, EDB_PP_NARG(__VA_ARGS__)), f __VA_OPT__(,) __VA_ARGS__))
+	#define EDB_PP_MAP(f, ...) EDB_EXPAND(EDB_APPLY_F_(EDB_CONCAT(EDB_APPLYF, EDB_PP_NARG(__VA_ARGS__)), f __VA_OPT__(,) __VA_ARGS__))
 #else
-  #define EDB_PP_MAP(f, ...) EDB_EXPAND(EDB_APPLY_F_(EDB_CONCAT(EDB_APPLYF, EDB_PP_NARG(__VA_ARGS__)), f, __VA_ARGS__))
+	#define EDB_PP_MAP(f, ...) EDB_EXPAND(EDB_APPLY_F_(EDB_CONCAT(EDB_APPLYF, EDB_PP_NARG(__VA_ARGS__)), f, __VA_ARGS__))
 #endif
 
 /*** End generated code ***/
 #endif
+
+#endif //!defined(PROPERTY_ACCESS_NO_MACROS)
 
 
 #endif // EDB_PROPERTY_ACCESSOR_H
