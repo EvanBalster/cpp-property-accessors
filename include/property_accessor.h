@@ -164,9 +164,11 @@ namespace property_access
 	{
 		/*
 			This template detects if a type is a property accessor by checking for the presence of a member named _property_accessor_tag.
+				Reference qualifiers will be ignored.
 		*/
-		template<typename T, typename = void>struct is_property_accessor                                                      : public std::bool_constant<false> {}; \
-		template<typename T>                 struct is_property_accessor<T, std::void_t<decltype(T::_property_accessor_tag)>> : public std::bool_constant<true> {};
+		template<typename T, typename = void> struct is_property_accessor : public std::bool_constant<false> {}; \
+		template<typename T>
+		struct is_property_accessor<T, std::void_t<decltype(std::remove_reference_t<T>::_property_accessor_tag)>> : public std::bool_constant<true> {};
 
 		template<typename T> constexpr bool is_property_accessor_v = is_property_accessor<T>::value;
 
@@ -247,7 +249,7 @@ namespace property_access
 #define EDB_tmp_FwdBiOp(OP)           EDB_tmp_FwdBiOp_  (OP, const) EDB_tmp_FwdBiOp_  (OP, )
 #define EDB_tmp_FwdPrefOp(OP)         EDB_tmp_FwdPrefOp_(OP, const) EDB_tmp_FwdPrefOp_(OP, )
 #define EDB_tmp_FwdPostOp(OP)         EDB_tmp_FwdPostOp_(OP, const) EDB_tmp_FwdPostOp_(OP, )
-#define EDB_tmp_FwdBiOp_(OP, CONST)   template<typename Y> \
+#define EDB_tmp_FwdBiOp_(OP, CONST)   template<typename Y, std::enable_if_t<!detail::is_property_accessor_v<Y>, bool> = true> \
     decltype(auto) operator OP (Y &&y) CONST {return this->_property_get() OP std::forward<Y>(y);}
 #define EDB_tmp_FwdPrefOp_(OP, CONST) decltype(auto) operator OP ()    CONST {return OP this->_property_get();}
 #define EDB_tmp_FwdPostOp_(OP, CONST) decltype(auto) operator OP (int) CONST {return this->_property_get() OP;}
@@ -377,8 +379,8 @@ namespace property_access
 
 
 		// Special case: assigning from another property accessor of the same type.
-		decltype(auto) operator=(const proxy &other) const    {return this->_property_get() = *other;}
-		decltype(auto) operator=(const proxy &other)          {return this->_property_get() = *other;}
+		decltype(auto) operator=(const proxy &other) const    {return this->_property_get() = other._property_get();}
+		decltype(auto) operator=(const proxy &other)          {return this->_property_get() = other._property_get();}
 
 		// Forward address-of operator.
 		EDB_tmp_FwdPrefOp(&)
@@ -400,7 +402,7 @@ namespace property_access
 #define EDB_tmp_ValueAssignOp(OP)           EDB_tmp_ValueAssignOp_  (OP, const) EDB_tmp_ValueAssignOp_  (OP, )
 #define EDB_tmp_ValueIncrPrefOp(OP)         EDB_tmp_ValueIncrPrefOp_(OP, const) EDB_tmp_ValueIncrPrefOp_(OP, )
 #define EDB_tmp_ValueIncrPostOp(OP)         EDB_tmp_ValueIncrPostOp_(OP, const) EDB_tmp_ValueIncrPostOp_(OP, )
-#define EDB_tmp_ValueAssignOp_(OP, CONST)   template<typename Y> \
+#define EDB_tmp_ValueAssignOp_(OP, CONST)   template<typename Y, std::enable_if_t<!detail::is_property_accessor_v<Y>, bool> = true> \
 		auto operator OP (Y &&y) CONST -> decltype(std::declval<getter_result_t<CONST GetSet_t>&>() OP std::forward<Y>(y), *this) \
 			{auto x=this->_property_get(); x OP std::forward<Y>(y); this->_property_set(x); return *this;}
 #define EDB_tmp_ValueIncrPrefOp_(OP, CONST) decltype(auto) operator OP ()    CONST {auto x = this->_property_get(); return (OP x, this->_property_set(x), *this);}
@@ -423,8 +425,8 @@ namespace property_access
 		*/
 
 		// Special case: assigning from another property accessor of the same type.
-		decltype(auto) operator=(const value &other) const    {return this->_property_set(*other);}
-		decltype(auto) operator=(const value &other)          {return this->_property_set(*other);}
+		decltype(auto) operator=(const value &other) const    {return this->_property_set(other._property_get());}
+		decltype(auto) operator=(const value &other)          {return this->_property_set(other._property_get());}
 
 		// Assigment operators, where supported by the value.
 		EDB_tmp_ValueAssignOp(=)
@@ -503,7 +505,7 @@ namespace property_access
 	*/
 #define EDB_tmp_FwdRhsOp(OP)         EDB_tmp_FwdRhsOp_(OP, const) EDB_tmp_FwdRhsOp_(OP, )
 #define EDB_tmp_FwdRhsOp_(OP, CONST) \
-	template<typename X, typename GetSet_t, std::enable_if_t<!detail::is_property_accessor_v<X>, bool> = true> \
+	template<typename X, typename GetSet_t> \
 	decltype(auto) operator OP(X &&x, CONST common <GetSet_t> &p)  {return (std::forward<X>(x) OP p._property_get());}
 
 	EDB_tmp_FwdRhsOp(+)   EDB_tmp_FwdRhsOp(-)   EDB_tmp_FwdRhsOp(*)   EDB_tmp_FwdRhsOp(/)
