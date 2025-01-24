@@ -150,24 +150,6 @@
 
 namespace property_access
 {
-	// Common base type for all property accessors.
-	struct property_base
-	{
-		property_base() = default;
-
-	private:
-		// Property accessors have no unique state and may not themselves be copied or moved.
-		property_base           (const property_base &o);
-		property_base           (property_base      &&o);
-		property_base& operator=(const property_base &o);
-		property_base& operator=(property_base      &&o);
-	};
-
-
-	// Type traits used by this library.
-	template<typename T>
-	constexpr bool is_property_accessor_v = std::is_base_of_v<property_access::property_base, std::remove_reference_t<T>>;
-
 	template<typename GetSet_t>
 	using getter_result_t = decltype(std::declval<GetSet_t&>().GetSet_t::get());
 
@@ -187,6 +169,15 @@ namespace property_access
 
 	namespace detail
 	{
+		/*
+			This template detects if a type is a property accessor by checking for the presence of a member named _property_accessor_tag.
+		*/
+		template<typename T, typename = void>struct is_property_accessor                                                      : public std::bool_constant<false> {}; \
+		template<typename T>                 struct is_property_accessor<T, std::void_t<decltype(T::_property_accessor_tag)>> : public std::bool_constant<true> {};
+
+		template<typename T> constexpr bool is_property_accessor_v = is_property_accessor<T>::value;
+
+
 		template<typename To, typename GetterResult_t>
 		static constexpr bool prohibit_fwd_convert_v = std::is_rvalue_reference_v<To> || std::is_same_v<std::decay_t<GetterResult_t>, std::decay_t<To>>;
 
@@ -216,7 +207,7 @@ namespace property_access
 
 #define EDB_tmp_DetectPropertyOption(OPTION) \
 			template<typename T, typename = void>struct option_ ## OPTION                                                           : public std::bool_constant<false> {}; \
-			template<typename T>                 struct option_ ## OPTION<T, std::void_t<decltype(T::_property_option_ ## OPTION)>> : public std::bool_constant<true> {};
+			template<typename T>                 struct option_ ## OPTION<T, std::void_t<decltype(T::_property_option_ ## OPTION)>> : public std::bool_constant<T::_property_option_ ## OPTION> {};
 
 		EDB_tmp_DetectPropertyOption(pointer_emulation)
 
@@ -232,7 +223,7 @@ namespace property_access
 		The memory layout of any specialization must be identical to the type 'GetSet_t'.
 	*/
 	template<typename T, typename GetSet_t, typename Enable = void>
-	struct members : public property_base
+	struct members
 	{
 		union
 		{
@@ -255,7 +246,7 @@ namespace property_access
 		};
 
 		// Enable this property to emulate a pointer.
-		enum { _property_option_pointer_emulation };
+		static constexpr bool _property_option_pointer_emulation = true;
 	};
 
 	
@@ -281,8 +272,9 @@ namespace property_access
 		static_assert(sizeof (members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>) == sizeof (GetSet_t));
 		static_assert(alignof(members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>) == alignof(GetSet_t));
 
-		static constexpr bool
-			_property_option_pointer_emulation = detail::option_pointer_emulation<common>::value;
+		// Metadata about this property accessor type.
+		static struct {}      _property_accessor_tag;
+		static constexpr bool _property_option_pointer_emulation = detail::option_pointer_emulation<common>::value;
 
 		// Get methods.
 		decltype(std::declval<const GetSet_t>().get()) _property_get() const    {return this->_property_getset.get();}
@@ -367,6 +359,14 @@ namespace property_access
 		decltype(auto) operator->*(M &&m) const    {if constexpr (_property_option_pointer_emulation) return this->_property_get().*std::forward<M>(m); else this->_property_get()->*std::forward<M>(m);}
 		template<typename M>
 		decltype(auto) operator->*(M &&m)          {if constexpr (_property_option_pointer_emulation) return this->_property_get().*std::forward<M>(m); else this->_property_get()->*std::forward<M>(m);}
+
+
+	private:
+		// Property accessors have no unique state and may not themselves be copied or moved.
+		common           (const common &o);
+		common           (common      &&o);
+		common& operator=(const common &o);
+		common& operator=(common      &&o);
 	};
 
 
@@ -510,7 +510,7 @@ namespace property_access
 	*/
 #define EDB_tmp_FwdRhsOp(OP)         EDB_tmp_FwdRhsOp_(OP, const) EDB_tmp_FwdRhsOp_(OP, )
 #define EDB_tmp_FwdRhsOp_(OP, CONST) \
-	template<typename X, typename GetSet_t, std::enable_if_t<!is_property_accessor_v<X>, bool> = true> \
+	template<typename X, typename GetSet_t, std::enable_if_t<!detail::is_property_accessor_v<X>, bool> = true> \
     decltype(auto) operator OP(X &&x, CONST common <GetSet_t> &p)  {return (std::forward<X>(x) OP p._property_get());}
 
 	EDB_tmp_FwdRhsOp(+)   EDB_tmp_FwdRhsOp(-)   EDB_tmp_FwdRhsOp(*)   EDB_tmp_FwdRhsOp(/)
