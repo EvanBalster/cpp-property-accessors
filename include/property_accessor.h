@@ -382,11 +382,12 @@ namespace property_access
 		decltype(auto) operator=(const proxy &other) const    {return this->_property_get() = other._property_get();}
 		decltype(auto) operator=(const proxy &other)          {return this->_property_get() = other._property_get();}
 
+		// Forward assignments to the referent.
+		template<typename Y> decltype(auto) operator=(Y &&y) const {return this->_property_get() = std::forward<Y>(y);}
+		template<typename Y> decltype(auto) operator=(Y &&y)       {return this->_property_get() = std::forward<Y>(y);}
+
 		// Forward address-of operator.
 		EDB_tmp_FwdPrefOp(&)
-
-		// Forward assignments to the referent.
-		EDB_tmp_FwdBiOp(=)
 
 		// Forward compound assignments to the referent.
 		EDB_tmp_FwdBiOp(+=)    EDB_tmp_FwdBiOp(-=)    EDB_tmp_FwdBiOp(*=)    EDB_tmp_FwdBiOp(/=)  
@@ -429,7 +430,8 @@ namespace property_access
 		decltype(auto) operator=(const value &other)          {return this->_property_set(other._property_get());}
 
 		// Assigment operators, where supported by the value.
-		EDB_tmp_ValueAssignOp(=)
+		template<typename Y> auto operator=(Y &&y) const -> decltype(this->_property_set(std::forward<Y>(y)), *this) {this->_property_set(std::forward<Y>(y)); return *this;}
+		template<typename Y> auto operator=(Y &&y)       -> decltype(this->_property_set(std::forward<Y>(y)), *this) {this->_property_set(std::forward<Y>(y)); return *this;}
 
 		// Compound assignment operators, where supported by the value.
 		EDB_tmp_ValueAssignOp(+=)  EDB_tmp_ValueAssignOp(-=)  EDB_tmp_ValueAssignOp(*=)  EDB_tmp_ValueAssignOp(/=)
