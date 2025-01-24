@@ -119,10 +119,10 @@
 	#define EDB_PropertyAccessors_Setup_Custom(NAME, ...)                                  struct _gs_ ## NAME : _property_actual_t {__VA_ARGS__};
 
 	#define EDB_PropertyAccessors_Union_UnionMember(...) __VA_ARGS__
-	#define EDB_PropertyAccessors_Union_Proxy(  TYPE, NAME, ...) property_access::proxy<_properties::_gs_ ## NAME> NAME;
-	#define EDB_PropertyAccessors_Union_GetOnly(TYPE, NAME, ...) property_access::value<_properties::_gs_ ## NAME> NAME;
-	#define EDB_PropertyAccessors_Union_GetSet( TYPE, NAME, ...) property_access::value<_properties::_gs_ ## NAME> NAME;
-	#define EDB_PropertyAccessors_Union_Custom(NAME, ...)        property_access::value<_properties::_gs_ ## NAME> NAME;
+	#define EDB_PropertyAccessors_Union_Proxy(  TYPE, NAME, ...) property_access::property<_properties::_gs_ ## NAME> NAME;
+	#define EDB_PropertyAccessors_Union_GetOnly(TYPE, NAME, ...) property_access::property<_properties::_gs_ ## NAME> NAME;
+	#define EDB_PropertyAccessors_Union_GetSet( TYPE, NAME, ...) property_access::property<_properties::_gs_ ## NAME> NAME;
+	#define EDB_PropertyAccessors_Union_Custom(NAME, ...)        property_access::property<_properties::_gs_ ## NAME> NAME;
 
 	// Implementation details of the PropertyAccess_Members macro.
 	#define EDB_PropertyMembers_Variable(NAME) \
@@ -149,19 +149,20 @@ namespace property_access
 	template<typename GetSet_t, typename Value_t = getter_result_t<GetSet_t>>
 	using setter_result_t = decltype(std::declval<GetSet_t&>().GetSet_t::set(std::declval<Value_t>));
 
-	template<typename GetSet_t, typename T>
-	struct has_setter_impl
-	{
-		template<typename U> static auto check(int) -> decltype(std::declval<U>().set(std::declval<T>()), std::true_type{});
-		template<typename U> static std::false_type check(...);
-
-		static constexpr bool value = decltype(check<GetSet_t>(0))::value;
-	};
-	template<typename GetSet_t, typename Y>
-	static constexpr bool has_setter = has_setter_impl<GetSet_t, Y>::value;
-
 	namespace detail
 	{
+		template<typename GetSet_t, typename T>
+		struct has_setter_impl
+		{
+			template<typename U> static auto check(int) -> decltype(std::declval<U>().set(std::declval<T>()), std::true_type{});
+			template<typename U> static std::false_type check(...);
+
+			static constexpr bool value = decltype(check<GetSet_t>(0))::value;
+		};
+		template<typename GetSet_t, typename Y>
+		static constexpr bool has_setter = has_setter_impl<GetSet_t, Y>::value;
+
+
 		/*
 			This template detects if a type is a property accessor by checking for the presence of a member named _property_accessor_tag.
 				Reference qualifiers will be ignored.
@@ -260,36 +261,49 @@ namespace property_access
 		Implementation details shared by all property accessors.
 	*/
 	template<typename GetSet_t>
-	struct common : public members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>
+	struct property : public members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>
 	{
+		using _property_get_t       = getter_result_t<      GetSet_t>;
+		using _property_get_const_t = getter_result_t<const GetSet_t>;
+		using _property_members_t = members<std::decay_t<_property_get_t>, GetSet_t>;
+
+		static_assert(std::is_object_v<_property_get_const_t> || std::is_lvalue_reference_v<_property_get_const_t>,
+			"Property accessor's get() function must return either an object (ie, a value type) or an lvalue reference.");
+
+		// Classify the property accessor.
+		static constexpr bool _property_by_proxy = std::is_lvalue_reference_v<_property_get_const_t>;
+		static constexpr bool _property_by_value = std::is_object_v          <_property_get_const_t>;
+
+		// TODO is this constraint necessary?
+		static_assert( ! ( _property_by_proxy && detail::has_setter<GetSet_t, _property_get_const_t> ),
+			"A property accessor whose get() function returns a reference may not have a set() function.");
+
 		/*
 			Validate any specialization of members<T,GetSet>.
 		*/
-		static_assert(sizeof (members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>) == sizeof (GetSet_t));
-		static_assert(alignof(members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>) == alignof(GetSet_t));
+		static_assert(sizeof (_property_members_t) == sizeof (GetSet_t));
+		static_assert(alignof(_property_members_t) == alignof(GetSet_t));
 
 		// Metadata about this property accessor type.
 		static struct {}      _property_accessor_tag;
-		static constexpr bool _property_option_pointer_emulation   = detail::option_pointer_emulation  <members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>>::value;
-		static constexpr bool _property_option_implicit_conversion = detail::option_implicit_conversion<members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>>::value;
+		static constexpr bool _property_option_pointer_emulation   = detail::option_pointer_emulation  <_property_members_t>::value;
+		static constexpr bool _property_option_implicit_conversion = detail::option_implicit_conversion<_property_members_t>::value;
 
 		// Get methods.
 		decltype(std::declval<const GetSet_t>().get()) _property_get() const    {return this->_property_getset.get();}
 		decltype(std::declval<      GetSet_t>().get()) _property_get()          {return this->_property_getset.get();}
 
 		// Set methods, if applicable.
-		template<typename Y>
-		decltype(std::declval<std::enable_if_t<has_setter<const GetSet_t,Y>, const GetSet_t&>>().set(std::declval<Y>()))
-			_property_set(Y &&y) const    {return this->_property_getset.set(std::forward<Y>(y));}
-		template<typename Y>
-		decltype(std::declval<std::enable_if_t<has_setter<      GetSet_t,Y>,       GetSet_t&>>().set(std::declval<Y>()))
-			_property_set(Y &&y)          {return this->_property_getset.set(std::forward<Y>(y));}
+		template<typename Y, std::enable_if_t<_property_by_proxy || detail::has_setter<const GetSet_t,Y>, bool> = true>
+		decltype(auto) _property_set(Y &&y) const    {if constexpr (_property_by_proxy) return this->_property_get() = std::forward<Y>(y); else return this->_property_getset.set(std::forward<Y>(y));}
+		template<typename Y, std::enable_if_t<_property_by_proxy || detail::has_setter<      GetSet_t,Y>, bool> = true>
+		decltype(auto) _property_set(Y &&y)          {if constexpr (_property_by_proxy) return this->_property_get() = std::forward<Y>(y); else return this->_property_getset.set(std::forward<Y>(y));}
 
 		/*
 			Support implicit conversion to the getter's return type.
 		*/
-		operator getter_result_t<const GetSet_t>()  const    {return this->_property_get();}
-		operator getter_result_t<      GetSet_t>()           {return this->_property_get();}
+		operator _property_get_const_t()  const    {return this->_property_get();}
+		operator _property_get_t      ()           {return this->_property_get();}
 
 		/*
 			Properties can be explicitly converted to any type that the getter's return type
@@ -299,17 +313,17 @@ namespace property_access
 		*/
 #if __cplusplus >= 202000L || _MSVC_LANG >= 202000L
 		// With explicit operator support
-		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, getter_result_t<const GetSet_t>>>>
-		explicit(!_property_option_implicit_conversion || !detail::misc_convertible_implicit_v<T, getter_result_t<const GetSet_t>>)
+		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, _property_get_const_t>>>
+		explicit(!_property_option_implicit_conversion || !detail::misc_convertible_implicit_v<T, _property_get_const_t>)
 		operator T() const    {return T(this->_property_get());}
-		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, getter_result_t<      GetSet_t>>>>
-		explicit(!_property_option_implicit_conversion || !detail::misc_convertible_implicit_v<T, getter_result_t<      GetSet_t>>)
+		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, _property_get_t      >>>
+		explicit(!_property_option_implicit_conversion || !detail::misc_convertible_implicit_v<T, _property_get_t      >)
 		operator T()          {return T(this->_property_get());}
 #else
 		// Without explicit operator support
-		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, getter_result_t<const GetSet_t>>>>
+		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, _property_get_const_t>>>
 		explicit operator T() const             {return   this->_property_get();}
-		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, getter_result_t<      GetSet_t>>>>
+		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, _property_get_t      >>>
 		explicit operator T()                   {return   this->_property_get();}
 #endif
 
@@ -338,6 +352,11 @@ namespace property_access
 		EDB_tmp_FwdBiOp(&)    EDB_tmp_FwdBiOp(|)    EDB_tmp_FwdBiOp(^)   
 
 		/*
+			The address-of operator is only supported when the property's get() function returns a reference.
+		*/
+		EDB_tmp_FwdPrefOp(&)
+
+		/*
 			Forward the dereference operator and arrow operator(s).
 				If _property_option_pointer_emulation is enabled (such as with unspecialized class/struct union)
 				these will instead make the property itself act as a pointer to its value.
@@ -346,13 +365,13 @@ namespace property_access
 		decltype(auto) operator* ()          {if constexpr (_property_option_pointer_emulation) return this->_property_get(); else return *this->_property_get();}
 		decltype(auto) operator->() const
 		{
-			if constexpr (_property_option_pointer_emulation) return detail::arrow_operator<getter_result_t<const GetSet_t>>::apply(this->_property_get());
-			else if constexpr (std::is_pointer_v<getter_result_t<const GetSet_t>>) return this->_property_get(); else return this->_property_get().operator->();
+			if constexpr (_property_option_pointer_emulation) return detail::arrow_operator<_property_get_const_t>::apply(this->_property_get());
+			else if constexpr (std::is_pointer_v<_property_get_const_t>) return this->_property_get(); else return this->_property_get().operator->();
 		}
 		decltype(auto) operator->()
 		{
-			if constexpr (_property_option_pointer_emulation) return detail::arrow_operator<getter_result_t<      GetSet_t>>::apply(this->_property_get());
-			else if constexpr (std::is_pointer_v<getter_result_t<      GetSet_t>>) return this->_property_get(); else return this->_property_get().operator->();
+			if constexpr (_property_option_pointer_emulation) return detail::arrow_operator<_property_get_t      >::apply(this->_property_get());
+			else if constexpr (std::is_pointer_v<_property_get_t      >) return this->_property_get(); else return this->_property_get().operator->();
 		}
 		template<typename M>
 		decltype(auto) operator->*(M &&m) const    {if constexpr (_property_option_pointer_emulation) return this->_property_get().*std::forward<M>(m); else this->_property_get()->*std::forward<M>(m);}
@@ -360,91 +379,48 @@ namespace property_access
 		decltype(auto) operator->*(M &&m)          {if constexpr (_property_option_pointer_emulation) return this->_property_get().*std::forward<M>(m); else this->_property_get()->*std::forward<M>(m);}
 
 
-	private:
-		// Property accessors have no unique state and may not themselves be copied or moved.
-		common           (const common &o);
-		common           (common      &&o);
-		common& operator=(const common &o);
-		common& operator=(common      &&o);
-	};
-
-
-	/*
-		Implementation struct for property accessors based on a get() method returning an lvalue reference.
-	*/
-	template<typename GetSet_t>
-	struct proxy : public common<GetSet_t>
-	{
-		// T must be an lvalue reference type.
-		static_assert(std::is_lvalue_reference_v<getter_result_t<const GetSet_t>>,
-			"Proxy property accessor requires an lvalue reference type.");
-		static_assert(!has_setter<GetSet_t, getter_result_t<const GetSet_t>>,
-			"Proxy property accessor does not use set() function; assignments are forwarded to get().");
-
-
-		// Special case: assigning from another property accessor of the same type.
-		decltype(auto) operator=(const proxy &other) const    {return this->_property_get() = other._property_get();}
-		decltype(auto) operator=(const proxy &other)          {return this->_property_get() = other._property_get();}
-
-		// Forward assignments to the referent.
-		template<typename Y> decltype(auto) operator=(Y &&y) const {return this->_property_get() = std::forward<Y>(y);}
-		template<typename Y> decltype(auto) operator=(Y &&y)       {return this->_property_get() = std::forward<Y>(y);}
-
-		// Forward address-of operator.
-		EDB_tmp_FwdPrefOp(&)
-
-		// Forward compound assignments to the referent.
-		EDB_tmp_FwdBiOp(+=)    EDB_tmp_FwdBiOp(-=)    EDB_tmp_FwdBiOp(*=)    EDB_tmp_FwdBiOp(/=)  
-		EDB_tmp_FwdBiOp(%=)    EDB_tmp_FwdBiOp(<<=)   EDB_tmp_FwdBiOp(>>=) 
-		EDB_tmp_FwdBiOp(&=)    EDB_tmp_FwdBiOp(|=)    EDB_tmp_FwdBiOp(^=)  
-
-		// Forward increment and decrement operators to the referent.
-		EDB_tmp_FwdPrefOp(++)  EDB_tmp_FwdPrefOp(--) 
-		EDB_tmp_FwdPostOp(++)  EDB_tmp_FwdPostOp(--) 
-	};
-
-	// Boilerplate for applying assigment operators and increments/decrements to a value property accessor
-#define EDB_tmp_ValueAssignOp(OP)           EDB_tmp_ValueAssignOp_  (OP, const) EDB_tmp_ValueAssignOp_  (OP, )
-#define EDB_tmp_ValueIncrPrefOp(OP)         EDB_tmp_ValueIncrPrefOp_(OP, const) EDB_tmp_ValueIncrPrefOp_(OP, )
-#define EDB_tmp_ValueIncrPostOp(OP)         EDB_tmp_ValueIncrPostOp_(OP, const) EDB_tmp_ValueIncrPostOp_(OP, )
-#define EDB_tmp_ValueAssignOp_(OP, CONST)   template<typename Y, std::enable_if_t<!detail::is_property_accessor_v<Y>, bool> = true> \
-		auto operator OP (Y &&y) CONST -> decltype(std::declval<getter_result_t<CONST GetSet_t>&>() OP std::forward<Y>(y), *this) \
-			{auto x=this->_property_get(); x OP std::forward<Y>(y); this->_property_set(x); return *this;}
-#define EDB_tmp_ValueIncrPrefOp_(OP, CONST) decltype(auto) operator OP ()    CONST {auto x = this->_property_get(); return (OP x, this->_property_set(x), *this);}
-#define EDB_tmp_ValueIncrPostOp_(OP, CONST) decltype(auto) operator OP (int) CONST {auto x = this->_property_get(); auto y = x OP; this->_property_set(x); return y;}
-
-	/*
-		Implementation struct for a value property accessor based on a get() and optional set() method.
-	*/
-	template<typename GetSet_t>
-	struct value : public common<GetSet_t>
-	{
-		// T must be a value type (ie, not a reference or function -- function pointers are ok though)
-		static_assert(std::is_object_v<getter_result_t<const GetSet_t>>,
-			"Value property accessor requires a non-reference type.");
-
-
 		/*
-			Assignment, compound assignment, increment and decrement operators are valid only if
-				the property type supports the operator in question.
+			Assignment operators.  These work differently for reference accessors vs. value accessors.
 		*/
 
-		// Special case: assigning from another property accessor of the same type.
-		decltype(auto) operator=(const value &other) const    {return this->_property_set(other._property_get());}
-		decltype(auto) operator=(const value &other)          {return this->_property_set(other._property_get());}
+		// Special case: assigning from another instance of the same property accessor type.
+		decltype(auto) operator=(const property &other) const    {return (this->_property_set(other._property_get()), *this);}
+		decltype(auto) operator=(const property &other)          {return (this->_property_set(other._property_get()), *this);}
 
 		// Assigment operators, where supported by the value.
-		template<typename Y> auto operator=(Y &&y) const -> decltype(this->_property_set(std::forward<Y>(y)), *this) {this->_property_set(std::forward<Y>(y)); return *this;}
-		template<typename Y> auto operator=(Y &&y)       -> decltype(this->_property_set(std::forward<Y>(y)), *this) {this->_property_set(std::forward<Y>(y)); return *this;}
+		template<typename Y> decltype(auto) operator=(Y &&y) const {return (this->_property_set(std::forward<Y>(y)), *this);}
+		template<typename Y> decltype(auto) operator=(Y &&y)       {return (this->_property_set(std::forward<Y>(y)), *this);}
+
+
+		// Boilerplate for applying assigment operators and increments/decrements to a value property accessor
+#define EDB_tmp_CompoundAssignOp(OP)           EDB_tmp_CompoundAssignOp_  (OP, const) EDB_tmp_CompoundAssignOp_  (OP, )
+#define EDB_tmp_CompoundAssignOp_(OP, CONST)   template<typename Y, std::enable_if_t<!detail::is_property_accessor_v<Y>, bool> = true> decltype(auto) operator OP (Y &&y) CONST \
+			{if constexpr (_property_by_proxy) return this->_property_get() OP std::forward<Y>(y); \
+			else {auto x=this->_property_get(); return (x OP std::forward<Y>(y), this->_property_set(x), *this);}}
 
 		// Compound assignment operators, where supported by the value.
-		EDB_tmp_ValueAssignOp(+=)  EDB_tmp_ValueAssignOp(-=)  EDB_tmp_ValueAssignOp(*=)  EDB_tmp_ValueAssignOp(/=)
-		EDB_tmp_ValueAssignOp(%=)  EDB_tmp_ValueAssignOp(<<=) EDB_tmp_ValueAssignOp(>>=)
-		EDB_tmp_ValueAssignOp(&=)  EDB_tmp_ValueAssignOp(|=)  EDB_tmp_ValueAssignOp(^=)
+		EDB_tmp_CompoundAssignOp(+=)  EDB_tmp_CompoundAssignOp(-=)  EDB_tmp_CompoundAssignOp(*=)  EDB_tmp_CompoundAssignOp(/=)
+		EDB_tmp_CompoundAssignOp(%=)  EDB_tmp_CompoundAssignOp(<<=) EDB_tmp_CompoundAssignOp(>>=)
+		EDB_tmp_CompoundAssignOp(&=)  EDB_tmp_CompoundAssignOp(|=)  EDB_tmp_CompoundAssignOp(^=)
 
 		// Increment and decrement operators, where supported by the value.
-		EDB_tmp_ValueIncrPrefOp(++) EDB_tmp_ValueIncrPrefOp(--)
-		EDB_tmp_ValueIncrPostOp(++) EDB_tmp_ValueIncrPostOp(--)
+#define EDB_tmp_IncrPrefOp(OP)         EDB_tmp_IncrPrefOp_(OP, const) EDB_tmp_IncrPrefOp_(OP, )
+#define EDB_tmp_IncrPostOp(OP)         EDB_tmp_IncrPostOp_(OP, const) EDB_tmp_IncrPostOp_(OP, )
+#define EDB_tmp_IncrPrefOp_(OP, CONST) decltype(auto) operator OP ()    CONST {if constexpr (_property_by_proxy) return OP this->_property_get(); else {auto x = this->_property_get(); return (OP x, this->_property_set(x), *this);}}
+#define EDB_tmp_IncrPostOp_(OP, CONST) decltype(auto) operator OP (int) CONST {if constexpr (_property_by_proxy) return this->_property_get() OP; else {auto x = this->_property_get(), y = x; return (x OP, this->_property_set(x), y);}}
+
+		EDB_tmp_IncrPrefOp(++) EDB_tmp_IncrPrefOp(--)
+		EDB_tmp_IncrPostOp(++) EDB_tmp_IncrPostOp(--)
+
+
+		// Property accessors do not currently support move-assignment.
+		property& operator=(property &&o) = delete;
+
+
+	private:
+		// Property accessors don't independently exist and shouldn't be copy-constructed or move-constructed.
+		property           (const property &o);
+		property           (property      &&o);
 	};
 
 	/*
@@ -459,8 +435,6 @@ namespace property_access
 	struct getset_member<GetSet_t, PointerToMember,
 		std::enable_if_t<std::is_lvalue_reference_v<getter_result_t<const GetSet_t>>>> : GetSet_t
 	{
-		using property_t = proxy<getset_member>;
-
 		auto& get() const    {return this->GetSet_t::get().*PointerToMember;}
 		auto& get()          {return this->GetSet_t::get().*PointerToMember;}
 	};
@@ -470,40 +444,17 @@ namespace property_access
 	struct getset_member<GetSet_t, PointerToMember,
 		std::enable_if_t<std::is_object_v<getter_result_t<const GetSet_t>>>> : GetSet_t
 	{
-		using property_t = value<getset_member>;
-
 		std::remove_reference_t<Member_t> get() const    {return this->GetSet_t::get().*PointerToMember;}
 		std::remove_reference_t<Member_t> get()          {return this->GetSet_t::get().*PointerToMember;}
 
-		template<typename Y, std::enable_if_t<has_setter<const GetSet_t, Y>, bool> = true>
+		template<typename Y, std::enable_if_t<detail::has_setter<const GetSet_t, Y>, bool> = true>
 		void set(Y &&y) const    {auto x = this->GetSet_t::get(); x.*PointerToMember = std::forward<Y>(y); this->GetSet_t::set(std::move(x));}
-		template<typename Y, std::enable_if_t<has_setter<      GetSet_t, Y>, bool> = true>
+		template<typename Y, std::enable_if_t<detail::has_setter<      GetSet_t, Y>, bool> = true>
 		void set(Y &&y)          {auto x = this->GetSet_t::get(); x.*PointerToMember = std::forward<Y>(y); this->GetSet_t::set(std::move(x));}
 	};
 
 	template<typename GetSet_t, auto PointerToMember>
-	using member = typename getset_member<GetSet_t, PointerToMember>::property_t;
-
-	/*
-		Template property_accessor automatically selects either value<> or proxy<> depending on
-			the return type of GetSet_t::get().
-	*/
-	namespace detail
-	{
-		template<typename GetSet_t, typename Enable = void>
-		struct property_implementation;
-
-		template<typename GetSet_t>
-		struct property_implementation<GetSet_t, std::enable_if_t<std::is_lvalue_reference_v<getter_result_t<const GetSet_t>>> >
-			{using type = property_access::proxy<GetSet_t>;};
-
-		template<typename GetSet_t>
-		struct property_implementation<GetSet_t, std::enable_if_t<std::is_object_v<getter_result_t<const GetSet_t>>> >
-			{using type = property_access::value<GetSet_t>;};
-	}
-
-	template<typename GetSet_t>
-	using property_accessor = typename detail::property_implementation<GetSet_t>::type;
+	using member = property<getset_member<GetSet_t, PointerToMember>>;
 
 	/*
 		When a property accessor is the right-hand operand to some operator, substitute the value.
@@ -512,7 +463,7 @@ namespace property_access
 #define EDB_tmp_FwdRhsOp(OP)         EDB_tmp_FwdRhsOp_(OP, const) EDB_tmp_FwdRhsOp_(OP, )
 #define EDB_tmp_FwdRhsOp_(OP, CONST) \
 	template<typename X, typename GetSet_t> \
-	decltype(auto) operator OP(X &&x, CONST common <GetSet_t> &p)  {return (std::forward<X>(x) OP p._property_get());}
+	decltype(auto) operator OP(X &&x, CONST property <GetSet_t> &p)  {return (std::forward<X>(x) OP p._property_get());}
 
 	EDB_tmp_FwdRhsOp(+)   EDB_tmp_FwdRhsOp(-)   EDB_tmp_FwdRhsOp(*)   EDB_tmp_FwdRhsOp(/)
 	EDB_tmp_FwdRhsOp(+=)  EDB_tmp_FwdRhsOp(-=)  EDB_tmp_FwdRhsOp(*=)  EDB_tmp_FwdRhsOp(/=)
@@ -524,12 +475,12 @@ namespace property_access
 #undef EDB_tmp_FwdRhsOp_
 #undef EDB_tmp_FwdRhsOp
 
-#undef EDB_tmp_ValueAssignOp_
-#undef EDB_tmp_ValueAssignOp
-#undef EDB_tmp_ValueIncrPrefOp_
-#undef EDB_tmp_ValueIncrPrefOp
-#undef EDB_tmp_ValueIncrPostOp_
-#undef EDB_tmp_ValueIncrPostOp
+#undef EDB_tmp_CompoundAssignOp_
+#undef EDB_tmp_CompoundAssignOp
+#undef EDB_tmp_IncrPrefOp_
+#undef EDB_tmp_IncrPrefOp
+#undef EDB_tmp_IncrPostOp_
+#undef EDB_tmp_IncrPostOp
 
 #undef EDB_tmp_FwdBiOp_
 #undef EDB_tmp_FwdBiOp
@@ -545,7 +496,7 @@ namespace property_access
 		without referencing the property_access namespace.
 */
 template<typename GetSet_t>
-using property_accessor = property_access::property_accessor<GetSet_t>;
+using property_accessor = property_access::property<GetSet_t>;
 
 
 
