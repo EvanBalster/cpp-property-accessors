@@ -285,8 +285,6 @@ With just a few exceptions, property accessors will react to operators just like
 
 | Operators                                                    | Proxy<br />Access | Value<br />Access | Notes                                                        |
 | ------------------------------------------------------------ | ----------------- | ----------------- | ------------------------------------------------------------ |
-| Implicit conversions                                         | ✅                 | ✅                 |                                                              |
-| Explicit conversions                                         | ⚠️                 | ⚠️                 | Requires C++20 to work automatically.<br />Otherwise, enable it with class member specialization. |
 | Function call `()`                                           | ✅                 | ✅ †               | including C++23 multidimensional subscript.                  |
 | Subscript `[]`                                               | ✅                 | ✅ †               |                                                              |
 | Math `+ - * / % << >>`                                       | ✅                 | ✅ †               |                                                              |
@@ -300,6 +298,8 @@ With just a few exceptions, property accessors will react to operators just like
 | Address-of `&`                                               | ✅                 | ❌                 | Enable for values via specialization.                        |
 | `,`                                                          | ❌                 | ❌                 | This rare operator can create logic errors.<br />Enable it with a class member specialization. |
 | `new delete new[] delete[]`                                  | ❌                 | ❌                 | accessors are not typically allocated.                       |
+| Implicit conversions                                         | ⚠️                 | ⚠️                 | Always implicitly convertible to `get`'s result.<br />Other implicit conversion require C++20 and<br />a `members` template specialization declaring<br />`_property_option_implicit_conversion`. |
+| Explicit conversions                                         | ✅                 | ✅                 | By default, properties support explicit conversion<br />to any type the `get` value is convertible to. |
 
 † In the case of value property accessors, these operator are applied to the result of the `get` function.  `set` is not invoked.
 

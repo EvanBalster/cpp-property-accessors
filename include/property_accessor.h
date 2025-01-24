@@ -177,10 +177,10 @@ namespace property_access
 		static constexpr bool prohibit_fwd_convert_v = std::is_rvalue_reference_v<To> || std::is_same_v<std::decay_t<GetterResult_t>, std::decay_t<To>>;
 
 		template<typename To, typename GetterResult_t>
-		static constexpr bool forward_convert_v          = !prohibit_fwd_convert_v<To, GetterResult_t> && std::is_constructible_v<To, GetterResult_t>;
+		static constexpr bool misc_convertible_explicit_v = !prohibit_fwd_convert_v<To, GetterResult_t> && std::is_constructible_v<To, GetterResult_t>;
 
 		template<typename To, typename GetterResult_t>
-		static constexpr bool forward_convert_implicit_v = !prohibit_fwd_convert_v<To, GetterResult_t> && std::is_convertible_v<GetterResult_t, To>;
+		static constexpr bool misc_convertible_implicit_v = !prohibit_fwd_convert_v<To, GetterResult_t> && std::is_convertible_v<GetterResult_t, To>;
 
 
 		// This type allows using -> to access members of a value property accessor's values.
@@ -200,11 +200,12 @@ namespace property_access
 		struct arrow_operator<T&>    {static T* apply(T &t) {return &t;}};
 
 
-#define EDB_tmp_DetectPropertyOption(OPTION) \
+#define EDB_tmp_DetectablePropertyOption(OPTION) \
 			template<typename T, typename = void>struct option_ ## OPTION                                                           : public std::bool_constant<false> {}; \
 			template<typename T>                 struct option_ ## OPTION<T, std::void_t<decltype(T::_property_option_ ## OPTION)>> : public std::bool_constant<T::_property_option_ ## OPTION> {};
 
-		EDB_tmp_DetectPropertyOption(pointer_emulation)
+		EDB_tmp_DetectablePropertyOption(pointer_emulation)
+		EDB_tmp_DetectablePropertyOption(implicit_conversion)
 
 #undef EDB_tmp_DetectPropertyOption
 	}
@@ -269,7 +270,8 @@ namespace property_access
 
 		// Metadata about this property accessor type.
 		static struct {}      _property_accessor_tag;
-		static constexpr bool _property_option_pointer_emulation = detail::option_pointer_emulation<common>::value;
+		static constexpr bool _property_option_pointer_emulation   = detail::option_pointer_emulation  <members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>>::value;
+		static constexpr bool _property_option_implicit_conversion = detail::option_implicit_conversion<members<std::decay_t<getter_result_t<GetSet_t>>, GetSet_t>>::value;
 
 		// Get methods.
 		decltype(std::declval<const GetSet_t>().get()) _property_get() const    {return this->_property_getset.get();}
@@ -290,23 +292,25 @@ namespace property_access
 		operator getter_result_t<      GetSet_t>()           {return this->_property_get();}
 
 		/*
-			Forward conversion operators to the property value.
-				Support for explicit conversion operators requires C++20.
+			Properties can be explicitly converted to any type that the getter's return type
+				is explicitly or implicitly convertible to.
+				Implicit conversion to types other than the result of get() is disabled by default,
+				because there is no way to treat the real type as "preferred" in overload resolution.
 		*/
 #if __cplusplus >= 202000L || _MSVC_LANG >= 202000L
 		// With explicit operator support
-		template<typename T, typename = std::enable_if_t<detail::forward_convert_v<T, getter_result_t<const GetSet_t>>>>
-		explicit(!detail::forward_convert_implicit_v<T, getter_result_t<const GetSet_t>>)
+		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, getter_result_t<const GetSet_t>>>>
+		explicit(!_property_option_implicit_conversion || !detail::misc_convertible_implicit_v<T, getter_result_t<const GetSet_t>>)
 		operator T() const    {return T(this->_property_get());}
-		template<typename T, typename = std::enable_if_t<detail::forward_convert_v<T, getter_result_t<      GetSet_t>>>>
-		explicit(!detail::forward_convert_implicit_v<T, getter_result_t<      GetSet_t>>)
+		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, getter_result_t<      GetSet_t>>>>
+		explicit(!_property_option_implicit_conversion || !detail::misc_convertible_implicit_v<T, getter_result_t<      GetSet_t>>)
 		operator T()          {return T(this->_property_get());}
 #else
 		// Without explicit operator support
-		template<typename T, typename = std::enable_if_t<detail::forward_convert_implicit_v<T, getter_result_t<const GetSet_t>>>>
-		operator T() const             {return   this->_property_get();}
-		template<typename T, typename = std::enable_if_t<detail::forward_convert_implicit_v<T, getter_result_t<      GetSet_t>>>>
-		operator T()                   {return   this->_property_get();}
+		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, getter_result_t<const GetSet_t>>>>
+		explicit operator T() const             {return   this->_property_get();}
+		template<typename T, typename = std::enable_if_t<detail::misc_convertible_explicit_v<T, getter_result_t<      GetSet_t>>>>
+		explicit operator T()                   {return   this->_property_get();}
 #endif
 
 		/*
