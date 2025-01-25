@@ -274,7 +274,9 @@ namespace property_access
 
 </blockquote>
 
-Assigning to member variables through a property works.  In this case, a temporary copy of the property value will be made, its member variable will be changed, and the setter will be called with the modified property value.
+This will even allow you to assign to member variables of a value-access property.  In this case, a temporary copy of the property value will be made, its member variable will be changed, and the setter will be called with the modified property value.
+
+⚠️ When compiling with C++17, the `PropertyAccess_Members` macro will cause your property accessors' destructors to become non-trivial even if the underlying `GetSet_t` is trivially-destructible.  This may produce warning or error messages about implicitly-deleted destructors in classes that include property accessors.  To resolve this warning, declare a destructor in your class and manually destruct any non-trivial variables underlying your property accessors.
 
 ## Type Emulation: Operator Overloading
 

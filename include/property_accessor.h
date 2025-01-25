@@ -100,11 +100,21 @@
 
 			PropertyAccess_Members(vector2D, Variables(x, y), Methods(norm));
 	*/
+#if __cplusplus >= 202000L || _MSVC_LANG >= 202000L
 	#define PropertyAccess_Members(TYPE, VARIABLES, METHODS) \
 		template<typename GetSet_t> struct property_access::members<TYPE, GetSet_t> { \
 			using _property_class_t = TYPE; \
 			EDB_PropertyMembers_Argument_ ## VARIABLES \
-			EDB_PropertyMembers_Argument_ ## METHODS }
+			EDB_PropertyMembers_Argument_ ## METHODS   \
+			~members() = default; ~members() noexcept requires (!std::is_trivially_destructible_v<TYPE>) {} }
+#else
+	#define PropertyAccess_Members(TYPE, VARIABLES, METHODS) \
+		template<typename GetSet_t> struct property_access::members<TYPE, GetSet_t> { \
+			using _property_class_t = TYPE; \
+			EDB_PropertyMembers_Argument_ ## VARIABLES \
+			EDB_PropertyMembers_Argument_ ## METHODS   \
+			~members() noexcept {} }
+#endif
 
 
 
@@ -222,11 +232,12 @@ namespace property_access
 	template<typename T, typename GetSet_t, typename Enable = void>
 	struct members
 	{
-		union
-		{
-			// All specializations must provide this variable.
-			GetSet_t _property_getset;
-		};
+		/*
+			Any specialization of members<T, GetSet_t> must provide a variable matching this one
+				and its memory layout (size, alignment, contents) must be identical to GetSet_t.
+				It may be placed in an anonymous union to facilitate member variable sub-properties.
+		*/
+		GetSet_t _property_getset;
 	};
 
 	/*
@@ -236,13 +247,9 @@ namespace property_access
 	template<typename T, typename GetSet_t>
 	struct members<T, GetSet_t, std::enable_if_t<(std::is_class_v<T> || std::is_union_v<T>)>>
 	{
-		union
-		{
-			// All specializations must provide this variable.
-			GetSet_t _property_getset;
-		};
+		GetSet_t _property_getset;
 
-		// Enable this property to emulate a pointer.
+		// If T is a class/struct/union type.
 		static constexpr bool _property_option_pointer_emulation = true;
 	};
 
@@ -413,14 +420,9 @@ namespace property_access
 		EDB_tmp_IncrPostOp(++) EDB_tmp_IncrPostOp(--)
 
 
-		// Property accessors do not currently support move-assignment.
-		property& operator=(property &&o) = delete;
-
-
 	private:
 		// Property accessors don't independently exist and shouldn't be copy-constructed or move-constructed.
-		property           (const property &o);
-		property           (property      &&o);
+		property(const property &o);
 	};
 
 	/*
