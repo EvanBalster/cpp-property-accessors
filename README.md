@@ -290,11 +290,11 @@ With just a few exceptions, property accessors will react to operators just like
 | Function call `()`                                           | ✅                 | ✅ †               | including C++23 multidimensional subscript.                  |
 | Subscript `[]`                                               | ✅                 | ✅ †               |                                                              |
 | Math `+ - * / % << >>`                                       | ✅                 | ✅ †               |                                                              |
-| Bitwise `~ | & ^`                                            | ✅                 | ✅ †               |                                                              |
+| Bitwise <code>~ &#124; & ^</code>                                            | ✅                 | ✅ †               |                                                              |
 | Logical `!`                                                  | ✅                 | ✅                 |                                                              |
-| Logical `&& ||`                                              | ❌                 | ❌                 | These rare operators can create logic errors.<br />Enable them with a class member specialization. |
+| Logical <code>&&  &#124;&#124;</code>                                              | ❌                 | ❌                 | These rare operators can create logic errors.<br />Enable them with a class member specialization. |
 | Assignment `=`                                               | ✅                 | ✅                 |                                                              |
-| Compound Assignment<br />`+= -= *= /= %=`<br />`<<= >>=  &= |= ^=` | ✅                 | ✅                 | value accessors make a temporary copy,<br />compound-assign it and call `set`. |
+| Compound Assignment<br />`+= -= *= /= %=`<br /><code><<= >>=  &= &#124;= ^=</code> | ✅                 | ✅                 | value accessors make a temporary copy,<br />compound-assign it and call `set`. |
 | Pre-Increment `++ --`<br />Post-Increment `++ --`            | ✅                 | ✅                 | value accessors make a temporary copy,<br />increment it and call `set`. |
 | Pointer `* -> ->*`                                           | ⚠️ ‡               | ⚠️ ‡               | Special behavior for unspecialized class types.<br />See "Class Member Access". |
 | Address-of `&`                                               | ✅                 | ❌                 | Enable for values via specialization.                        |
